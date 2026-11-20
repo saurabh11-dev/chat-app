@@ -1,0 +1,8 @@
+# One word or phrase per line (lowercase)
+idiot
+stupid
+fool
+dumb
+jerk
+trash
+scam

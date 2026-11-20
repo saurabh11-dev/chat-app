@@ -1,13 +1,13 @@
 from rest_framework import serializers
-from .models import ChatRoom
+
+from .models import ChatRoom, Message, RoomMembership
+from .moderation import has_abusive_content
 
 
 class ChatRoomSerializer(serializers.ModelSerializer):
-    
     created_by_handle = serializers.CharField(
         source='created_by.handle', read_only=True
     )
-    # Populated dynamically when listing nearby rooms with lat/lng
     distance_km = serializers.FloatField(read_only=True, required=False)
 
     class Meta:
@@ -40,3 +40,55 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         if float(value) <= 0:
             raise serializers.ValidationError("Radius must be greater than 0 km.")
         return value
+
+
+class RoomMembershipSerializer(serializers.ModelSerializer):
+    handle = serializers.CharField(source='user.handle', read_only=True)
+    room_name = serializers.CharField(source='room.name', read_only=True)
+
+    class Meta:
+        model = RoomMembership
+        fields = [
+            'id',
+            'room',
+            'room_name',
+            'handle',
+            'is_active',
+            'joined_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'room',
+            'room_name',
+            'handle',
+            'joined_at',
+            'updated_at',
+        ]
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender_handle = serializers.CharField(
+        source='sender.handle', read_only=True
+    )
+
+    class Meta:
+        model = Message
+        fields = [
+            'id',
+            'room',
+            'sender_handle',
+            'content',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'room', 'sender_handle', 'created_at']
+
+    def validate_content(self, value):
+        cleaned = value.strip()
+        if not cleaned:
+            raise serializers.ValidationError("Message content cannot be empty.")
+        if has_abusive_content(cleaned):
+            raise serializers.ValidationError(
+                "Message contains abusive or inappropriate language and cannot be sent."
+            )
+        return cleaned
