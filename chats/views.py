@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, views
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from .pagination import MessagePagination
 
 from .models import ChatRoom, Message, RoomMembership
 from .serializers import (
@@ -220,3 +221,28 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
         return Response(
             serializer.data, status=status.HTTP_201_CREATED, headers=headers
         )
+        
+class RoomMessageListCreateView(generics.ListCreateAPIView):
+    serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = MessagePagination
+
+    def _get_active_room_and_membership(self):
+        room = get_object_or_404(ChatRoom, pk=self.kwargs['pk'], is_active=True)
+        is_member = RoomMembership.objects.filter(
+            room=room, user=self.request.user, is_active=True
+        ).exists()
+        if not is_member:
+            self.permission_denied(
+                self.request,
+                message="You must be an active member of this room to access or send messages.",
+            )
+        return room
+
+    def get_queryset(self):
+        room = self._get_active_room_and_membership()
+        return (
+            Message.objects.filter(room=room)
+            .select_related('sender', 'room')
+            .order_by('-created_at')
+        )        
