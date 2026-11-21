@@ -226,6 +226,7 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = MessagePagination
+    throttle_scope = 'messages'
 
     def _get_active_room_and_membership(self):
         room = get_object_or_404(ChatRoom, pk=self.kwargs['pk'], is_active=True)
