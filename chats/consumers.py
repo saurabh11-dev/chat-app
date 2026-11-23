@@ -43,6 +43,7 @@ class RoomChatConsumer(AsyncJsonWebsocketConsumer):
         if is_abusive:
             await self.send_json({
                 "type": "error",
+                "code": "ABUSIVE_CONTENT",
                 "detail": "Message contains abusive or inappropriate language and cannot be sent.",
             })
             return
@@ -61,7 +62,7 @@ class RoomChatConsumer(AsyncJsonWebsocketConsumer):
                 "type": "chat.message",
                 "message": {
                     "id": msg.id,
-                    "room": msg.room_id,
+                    "room": int(self.room_id),
                     "sender_handle": user.handle,
                     "content": msg.content,
                     "created_at": msg.created_at.isoformat(),
