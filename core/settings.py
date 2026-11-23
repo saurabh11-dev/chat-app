@@ -42,8 +42,10 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "accounts",
     "chats",
+    "channels",
 ]
 
+ASGI_APPLICATION = "core.asgi.application"
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -168,10 +170,23 @@ if REDIS_URL:
             "LOCATION": REDIS_URL,
         }
     }
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
+        }
+    }
 else:
     CACHES = {
         "default": {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
             "LOCATION": "geochat-default-cache",
+        }
+    }
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
