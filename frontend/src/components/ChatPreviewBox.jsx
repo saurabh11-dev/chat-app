@@ -38,6 +38,11 @@ const formatTimestamp = (isoString) => {
  * @param {{ message: string, status?: number } | null} [props.historyError]
  * @param {() => void} [props.onRetryLoadHistory]
  * @param {object} [props.currentUser]
+ * @param {(roomId: string|number) => void} [props.onJoinRoom]
+ * @param {boolean} [props.isJoiningRoom]
+ * @param {string} [props.activeRoomName]
+ * @param {(roomId: string|number) => void} [props.onLeaveRoom]
+ * @param {boolean} [props.isLeavingRoom]
  */
 export const ChatPreviewBox = ({
   messages = [],
@@ -46,10 +51,15 @@ export const ChatPreviewBox = ({
   onSendMessage,
   isConnected = false,
   activeRoom = '1',
+  activeRoomName = '',
   isLoadingHistory = false,
   historyError = null,
   onRetryLoadHistory,
   currentUser = null,
+  onJoinRoom,
+  isJoiningRoom = false,
+  onLeaveRoom,
+  isLeavingRoom = false,
 }) => {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -77,6 +87,13 @@ export const ChatPreviewBox = ({
     }
   };
 
+  const isMembershipError = Boolean(
+    historyError?.status === 403 ||
+    (historyError?.message && historyError.message.toLowerCase().includes('member')) ||
+    errorBanner?.code === 'FORBIDDEN (4003)' ||
+    (errorBanner?.detail && errorBanner.detail.toLowerCase().includes('member'))
+  );
+
   return (
     <section className="chat-box" aria-label="Live Chat Room Console">
       {/* Console Header */}
@@ -84,7 +101,20 @@ export const ChatPreviewBox = ({
         <div className="chat-box__header-title">
           <span className="chat-box__pulse-indicator" />
           <h2 className="chat-box__heading">Live Chat Preview Console</h2>
-          <span className="chat-box__room-tag">Room #{activeRoom}</span>
+          <span className="chat-box__room-tag">
+            Room #{activeRoom} {activeRoomName ? `· ${activeRoomName}` : ''}
+          </span>
+          {isConnected && onLeaveRoom && (
+            <button
+              type="button"
+              className="chat-box__leave-btn"
+              onClick={() => onLeaveRoom(activeRoom)}
+              disabled={isLeavingRoom}
+              title="Leave this group anytime"
+            >
+              {isLeavingRoom ? 'Leaving...' : 'Leave Room'}
+            </button>
+          )}
         </div>
         <div className="chat-box__meta">
           {isLoadingHistory && (
@@ -125,14 +155,26 @@ export const ChatPreviewBox = ({
               <span className="error-banner__detail">{errorBanner.detail}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className="error-banner__dismiss"
-            onClick={onDismissError}
-            aria-label="Dismiss alert"
-          >
-            ×
-          </button>
+          <div className="error-banner__actions">
+            {(errorBanner.code === 'FORBIDDEN (4003)' || errorBanner.detail?.toLowerCase().includes('member')) && onJoinRoom && (
+              <button
+                type="button"
+                className="error-banner__action-btn"
+                onClick={() => onJoinRoom(activeRoom)}
+                disabled={isJoiningRoom}
+              >
+                {isJoiningRoom ? 'Joining...' : `Join Room #${activeRoom}`}
+              </button>
+            )}
+            <button
+              type="button"
+              className="error-banner__dismiss"
+              onClick={onDismissError}
+              aria-label="Dismiss alert"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 
@@ -162,15 +204,27 @@ export const ChatPreviewBox = ({
               </span>
             </div>
           </div>
-          {onRetryLoadHistory && (
-            <button
-              type="button"
-              className="history-error-banner__retry-btn"
-              onClick={onRetryLoadHistory}
-            >
-              Retry
-            </button>
-          )}
+          <div className="history-error-banner__actions">
+            {(historyError.status === 403 || isMembershipError) && onJoinRoom && (
+              <button
+                type="button"
+                className="history-error-banner__join-btn"
+                onClick={() => onJoinRoom(activeRoom)}
+                disabled={isJoiningRoom}
+              >
+                {isJoiningRoom ? 'Joining...' : `Join Room #${activeRoom}`}
+              </button>
+            )}
+            {onRetryLoadHistory && (
+              <button
+                type="button"
+                className="history-error-banner__retry-btn"
+                onClick={onRetryLoadHistory}
+              >
+                Retry
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -193,6 +247,62 @@ export const ChatPreviewBox = ({
               <p className="chat-box__empty-subtitle">
                 Retrieving prior messages from room #{activeRoom}.
               </p>
+            </div>
+          ) : isMembershipError ? (
+            <div className="chat-box__empty chat-box__empty--membership">
+              <div className="chat-box__empty-icon chat-box__empty-icon--locked">
+                <svg
+                  width="40"
+                  height="40"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#f87171"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
+              <p className="chat-box__empty-title">Room Membership Required</p>
+              <p className="chat-box__empty-subtitle">
+                You must be an active member of Room #{activeRoom} to load message history and participate in chat.
+              </p>
+              {onJoinRoom && (
+                <button
+                  type="button"
+                  className="btn btn--primary chat-box__empty-join-btn"
+                  onClick={() => onJoinRoom(activeRoom)}
+                  disabled={isJoiningRoom}
+                >
+                  {isJoiningRoom ? (
+                    <>
+                      <span className="btn__spinner" />
+                      Joining Room #{activeRoom}...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="8.5" cy="7" r="4" />
+                        <line x1="20" y1="8" x2="20" y2="14" />
+                        <line x1="23" y1="11" x2="17" y2="11" />
+                      </svg>
+                      Join Room #{activeRoom}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           ) : (
             <div className="chat-box__empty">

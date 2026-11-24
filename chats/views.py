@@ -56,8 +56,8 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
                     dist = haversine_km(
                         user_lat, user_lng, room.latitude, room.longitude
                     )
-                    effective_limit = max(search_radius, float(room.radius_km))
-                    if dist <= effective_limit:
+                    effective_limit = float(room.radius_km)
+                    if dist <= effective_limit and dist <= search_radius:
                         room.distance_km = dist
                         nearby_rooms.append(room)
 
@@ -85,39 +85,45 @@ class RoomJoinView(views.APIView):
     def post(self, request, pk):
         room = get_object_or_404(ChatRoom, pk=pk, is_active=True)
 
-        lat = request.data.get('lat') or request.query_params.get('lat')
-        lng = request.data.get('lng') or request.query_params.get('lng')
+        lat = request.data.get('lat') if 'lat' in request.data else request.query_params.get('lat')
+        lng = request.data.get('lng') if 'lng' in request.data else request.query_params.get('lng')
 
-        if (lat is not None and lng is None) or (lng is not None and lat is None):
+        if lat is None or lng is None:
+            # If already an active member, allow entering
+            existing = RoomMembership.objects.filter(
+                room=room, user=request.user, is_active=True
+            ).first()
+            if existing:
+                serializer = RoomMembershipSerializer(existing)
+                return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(
-                {"detail": "Provide both 'lat' and 'lng' together."},
+                {"detail": "Your location ('lat' and 'lng') is required to join this room."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if lat is not None and lng is not None:
-            try:
-                user_lat = float(lat)
-                user_lng = float(lng)
-            except ValueError:
-                return Response(
-                    {"detail": "'lat' and 'lng' must be valid numbers."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        try:
+            user_lat = float(lat)
+            user_lng = float(lng)
+        except ValueError:
+            return Response(
+                {"detail": "'lat' and 'lng' must be valid numbers."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
-                return Response(
-                    {"detail": "Coordinates out of range."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
+            return Response(
+                {"detail": "Coordinates out of range."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            dist = haversine_km(user_lat, user_lng, room.latitude, room.longitude)
-            if dist > float(room.radius_km):
-                return Response(
-                    {
-                        "detail": f"You are {dist} km away; room geofence radius is {room.radius_km} km."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        dist = haversine_km(user_lat, user_lng, room.latitude, room.longitude)
+        if dist > float(room.radius_km):
+            return Response(
+                {
+                    "detail": f"You are {dist:.2f} km away; room geofence radius is {room.radius_km} km."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         membership, _ = RoomMembership.objects.get_or_create(
             room=room,
@@ -135,9 +141,14 @@ class RoomLeaveView(views.APIView):
 
     def post(self, request, pk):
         room = get_object_or_404(ChatRoom, pk=pk)
-        membership = get_object_or_404(
-            RoomMembership, room=room, user=request.user, is_active=True
-        )
+        membership = RoomMembership.objects.filter(
+            room=room, user=request.user, is_active=True
+        ).first()
+        if not membership:
+            return Response(
+                {"detail": f"You are not an active member of room '{room.name}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         membership.is_active = False
         membership.save()
         return Response(
@@ -185,41 +196,6 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
 
     def create(self, request, *args, **kwargs):
         room = self._get_active_room_and_membership()
-
-        lat = request.data.get('lat') or request.query_params.get('lat')
-        lng = request.data.get('lng') or request.query_params.get('lng')
-
-        if (lat is not None and lng is None) or (lng is not None and lat is None):
-            return Response(
-                {"detail": "Provide both 'lat' and 'lng' together."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if lat is not None and lng is not None:
-            try:
-                user_lat = float(lat)
-                user_lng = float(lng)
-            except ValueError:
-                return Response(
-                    {"detail": "'lat' and 'lng' must be valid numbers."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
-                return Response(
-                    {"detail": "Coordinates out of range."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            dist = haversine_km(user_lat, user_lng, room.latitude, room.longitude)
-            if dist > float(room.radius_km):
-                return Response(
-                    {
-                        "detail": f"You are {dist} km away; room geofence radius is {room.radius_km} km."
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(room=room, sender=self.request.user)

@@ -1,4 +1,5 @@
 import { buildRoomWebSocketUrl } from '../config/env';
+import { isValidJwt } from '../utils/messageUtils';
 
 /**
  * Standard WebSocket connection states.
@@ -88,6 +89,17 @@ export class ChatSocket {
     }
     if (!token || !token.trim()) {
       throw new Error('JWT Access Token is required to connect.');
+    }
+    if (!isValidJwt(token.trim())) {
+      const errMsg = 'Invalid JWT Access Token: Must be a valid SimpleJWT string starting with eyJ (URLs are rejected).';
+      this._setStatus(ConnectionStatus.ERROR, { error: errMsg });
+      if (this.onErrorOccurred) {
+        this.onErrorOccurred({
+          code: 'INVALID_TOKEN',
+          detail: errMsg,
+        });
+      }
+      return null;
     }
 
     // Assign event listeners
@@ -247,8 +259,8 @@ export class ChatSocket {
    * @returns {WebSocket | null}
    */
   reconnect() {
-    if (!this.activeRoomId || !this.activeToken) {
-      console.warn('[ChatSocket] Cannot reconnect: No active room or token saved.');
+    if (!this.activeRoomId || !this.activeToken || !isValidJwt(this.activeToken)) {
+      console.warn('[ChatSocket] Cannot reconnect: No active room or valid token saved.');
       return null;
     }
     return this.connect({

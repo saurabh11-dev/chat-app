@@ -29,6 +29,68 @@ export function parseJwt(token) {
 }
 
 /**
+ * Checks whether a value is a valid JSON Web Token string.
+ * Specifically rejects URLs, origins, or non-JWT strings.
+ * Standard JWT format: 3 dot-separated Base64URL-encoded segments.
+ *
+ * @param {any} token
+ * @returns {boolean}
+ */
+export function isValidJwt(token) {
+  if (!token || typeof token !== 'string') return false;
+  const trimmed = token.trim();
+
+  // Explicitly reject URLs, origins, or web paths
+  if (
+    /^(https?|wss?|ftp):\/\//i.test(trimmed) ||
+    trimmed.startsWith('//') ||
+    trimmed.includes('/') ||
+    trimmed.includes('\\') ||
+    trimmed.includes('localhost') ||
+    trimmed.includes('127.0.0.1')
+  ) {
+    return false;
+  }
+
+  // Must have exactly 3 dot-separated segments (header.payload.signature)
+  const parts = trimmed.split('.');
+  if (parts.length !== 3) {
+    return false;
+  }
+
+  // Each segment must be non-empty base64url characters
+  const base64UrlRegex = /^[A-Za-z0-9_-]+$/;
+  if (!parts.every((part) => part.length > 0 && base64UrlRegex.test(part))) {
+    return false;
+  }
+
+  // SimpleJWT access tokens always have an encoded JSON header (starts with 'eyJ')
+  if (!trimmed.startsWith('eyJ')) {
+    return false;
+  }
+
+  // Ensure payload can be decoded as JSON
+  try {
+    const payload = parseJwt(trimmed);
+    return Boolean(payload && typeof payload === 'object');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns a sanitized JWT token, or empty string if invalid or a URL.
+ *
+ * @param {any} token
+ * @returns {string}
+ */
+export function sanitizeToken(token) {
+  if (typeof token !== 'string') return '';
+  const trimmed = token.trim();
+  return isValidJwt(trimmed) ? trimmed : '';
+}
+
+/**
  * Normalizes a message payload from either REST API or WebSocket consumer
  * into a single canonical UI representation.
  *

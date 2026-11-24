@@ -49,3 +49,46 @@ export const buildUserProfileApiUrl = () => {
   return `${API_BASE_URL}/api/accounts/profile/`;
 };
 
+/**
+ * Helper to construct the room join REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/<room_id>/join/
+ *
+ * @param {string|number} roomId - ID of the target chat room
+ * @returns {string} Room join endpoint URL
+ */
+export const buildRoomJoinApiUrl = (roomId) => {
+  const cleanRoomId = encodeURIComponent(String(roomId).trim());
+  return `${API_BASE_URL}/api/chats/rooms/${cleanRoomId}/join/`;
+};
+
+/**
+ * Helper to construct the room leave REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/<room_id>/leave/
+ *
+ * @param {string|number} roomId - ID of the target chat room
+ * @returns {string} Room leave endpoint URL
+ */
+export const buildRoomLeaveApiUrl = (roomId) => {
+  const cleanRoomId = encodeURIComponent(String(roomId).trim());
+  return `${API_BASE_URL}/api/chats/rooms/${cleanRoomId}/leave/`;
+};
+
+/**
+ * Helper to construct the nearby chat rooms discovery REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/?lat=<lat>&lng=<lng>&radius=<radius>
+ *
+ * @param {number|string} lat - Latitude
+ * @param {number|string} lng - Longitude
+ * @param {number|string} [radius=30] - Radius in km (defaults to 30)
+ * @returns {string} Nearby rooms endpoint URL
+ */
+export const buildNearbyRoomsApiUrl = (lat, lng, radius = 30) => {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+    radius: String(radius),
+  });
+  return `${API_BASE_URL}/api/chats/rooms/?${params.toString()}`;
+};
+
+

@@ -1,6 +1,8 @@
 import assert from 'node:assert';
 import {
   parseJwt,
+  isValidJwt,
+  sanitizeToken,
   normalizeMessage,
   getMessageKey,
   sortMessagesChronologically,
@@ -9,21 +11,47 @@ import {
 
 console.log('--- Testing messageUtils.js ---');
 
-// 1. parseJwt
+// 1. parseJwt, isValidJwt & sanitizeToken
 {
   // Test valid JWT with payload { "user_id": 42, "handle": "Falcon_99" }
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
   const payload = { user_id: 42, handle: 'Falcon_99' };
   const base64UrlPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const token = `header.${base64UrlPayload}.signature`;
-  const decoded = parseJwt(token);
+  const validToken = `${header}.${base64UrlPayload}.test_signature`;
+
+  assert.strictEqual(isValidJwt(validToken), true);
+  assert.strictEqual(sanitizeToken(validToken), validToken);
+
+  const decoded = parseJwt(validToken);
   assert.strictEqual(decoded.user_id, 42);
   assert.strictEqual(decoded.handle, 'Falcon_99');
 
-  // Test invalid token
+  // Test invalid tokens & URL strings
+  const invalidCases = [
+    'http://localhost:5173/',
+    'http://127.0.0.1:8000',
+    'ws://127.0.0.1:8000/ws/chats/rooms/1/?token=123',
+    'http%3A%2F%2Flocalhost%3A5173%2F',
+    'localhost:5173',
+    '//localhost:5173',
+    'random_string_not_a_jwt',
+    'invalid.token',
+    'part1.part2',
+    '',
+    null,
+    undefined,
+    12345,
+  ];
+
+  for (const invalid of invalidCases) {
+    assert.strictEqual(isValidJwt(invalid), false, `Expected isValidJwt to be false for: ${invalid}`);
+    assert.strictEqual(sanitizeToken(invalid), '', `Expected sanitizeToken to return empty string for: ${invalid}`);
+  }
+
   assert.strictEqual(parseJwt('invalid'), null);
   assert.strictEqual(parseJwt(''), null);
   assert.strictEqual(parseJwt(null), null);
-  console.log('✓ parseJwt tests passed');
+  console.log('✓ parseJwt, isValidJwt & sanitizeToken tests passed');
 }
 
 // 2. normalizeMessage

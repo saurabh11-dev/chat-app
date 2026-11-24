@@ -9,6 +9,7 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         source='created_by.handle', read_only=True
     )
     distance_km = serializers.FloatField(read_only=True, required=False)
+    is_member = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatRoom
@@ -22,9 +23,18 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             'radius_km',
             'is_active',
             'distance_km',
+            'is_member',
             'created_at',
         ]
         read_only_fields = ['id', 'created_by_handle', 'is_active', 'created_at']
+
+    def get_is_member(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        return RoomMembership.objects.filter(
+            room=obj, user=request.user, is_active=True
+        ).exists()
 
     def validate_latitude(self, value):
         if not (-90 <= float(value) <= 90):
