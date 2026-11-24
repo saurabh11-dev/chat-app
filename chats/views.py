@@ -160,6 +160,8 @@ class RoomMemberListView(generics.ListAPIView):
 class RoomMessageListCreateView(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = MessagePagination
+    throttle_scope = 'messages'
 
     def _get_active_room_and_membership(self):
         room = get_object_or_404(ChatRoom, pk=self.kwargs['pk'], is_active=True)
@@ -175,7 +177,11 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         room = self._get_active_room_and_membership()
-        return Message.objects.filter(room=room).select_related('sender', 'room')
+        return (
+            Message.objects.filter(room=room)
+            .select_related('sender', 'room')
+            .order_by('created_at', 'id')
+        )
 
     def create(self, request, *args, **kwargs):
         room = self._get_active_room_and_membership()
@@ -220,30 +226,4 @@ class RoomMessageListCreateView(generics.ListCreateAPIView):
         headers = self.get_success_headers(serializer.data)
         return Response(
             serializer.data, status=status.HTTP_201_CREATED, headers=headers
-        )
-        
-class RoomMessageListCreateView(generics.ListCreateAPIView):
-    serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    pagination_class = MessagePagination
-    throttle_scope = 'messages'
-
-    def _get_active_room_and_membership(self):
-        room = get_object_or_404(ChatRoom, pk=self.kwargs['pk'], is_active=True)
-        is_member = RoomMembership.objects.filter(
-            room=room, user=self.request.user, is_active=True
-        ).exists()
-        if not is_member:
-            self.permission_denied(
-                self.request,
-                message="You must be an active member of this room to access or send messages.",
-            )
-        return room
-
-    def get_queryset(self):
-        room = self._get_active_room_and_membership()
-        return (
-            Message.objects.filter(room=room)
-            .select_related('sender', 'room')
-            .order_by('-created_at')
         )        

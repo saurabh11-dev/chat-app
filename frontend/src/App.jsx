@@ -1,26 +1,40 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from './components/Navbar';
 import ConnectionPanel from './components/ConnectionPanel';
 import ChatPreviewBox from './components/ChatPreviewBox';
 import { chatSocket, ConnectionStatus } from './services/socket';
+import { fetchRoomMessages, fetchUserProfile } from './services/chatApi';
+import { mergeMessages, parseJwt, normalizeMessage } from './utils/messageUtils';
 import { API_BASE_URL, WS_BASE_URL } from './config/env';
 import './App.css';
 
 /**
- * GeoChat Main Application (Day 1)
+ * GeoChat Main Application
  *
- * Coordinates WebSocket connection state, incoming broadcast messages,
- * real-time moderation error handling, and modular subcomponents.
+ * Coordinates WebSocket connection state, persistent room history loading,
+ * deduplicated message merging, race-condition mitigation, and modular subcomponents.
  */
 export function App() {
   const [connectionStatus, setConnectionStatus] = useState(ConnectionStatus.DISCONNECTED);
   const [activeRoom, setActiveRoom] = useState('1');
   const [messages, setMessages] = useState([]);
   const [errorBanner, setErrorBanner] = useState(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
-  // Clean up WebSocket connection when application unmounts
+  // References to maintain fresh values in asynchronous callbacks and event listeners
+  const activeRoomRef = useRef('1');
+  const activeTokenRef = useRef('');
+  const currentUserRef = useRef(null);
+  const abortControllerRef = useRef(null);
+
+  // Clean up WebSocket connection and pending fetch requests when application unmounts
   useEffect(() => {
     return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
       chatSocket.disconnect('Application unmounting');
     };
   }, []);
@@ -33,20 +47,120 @@ export function App() {
   }, []);
 
   /**
+   * Fetches room message history from REST API and merges with existing messages.
+   * Cancels prior in-flight requests and guards against room-switch race conditions.
+   */
+  const loadRoomHistory = useCallback(async (roomId, token) => {
+    if (!roomId || !token) return;
+
+    // Abort prior in-flight request to prevent race conditions
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+
+    try {
+      const rawHistory = await fetchRoomMessages({
+        roomId,
+        token,
+        signal: controller.signal,
+      });
+
+      // Active room guard: Check if user switched rooms while request was in-flight
+      if (String(activeRoomRef.current) !== String(roomId)) {
+        return;
+      }
+
+      // Merge historical messages with any live messages already received in-flight
+      setMessages((prev) => mergeMessages(prev, rawHistory, currentUserRef.current));
+      setHistoryError(null);
+    } catch (err) {
+      if (err.name === 'AbortError' || controller.signal.aborted) {
+        // Ignored aborted fetch
+        return;
+      }
+
+      if (String(activeRoomRef.current) !== String(roomId)) {
+        return;
+      }
+
+      console.error(`[GeoChat] History fetch error for room ${roomId}:`, err);
+      setHistoryError({
+        message: err.message || 'Failed to load room message history.',
+        status: err.status,
+      });
+    } finally {
+      if (String(activeRoomRef.current) === String(roomId) && !controller.signal.aborted) {
+        setIsLoadingHistory(false);
+      }
+    }
+  }, []);
+
+  /**
    * Connect to specified Room ID using provided JWT Access Token.
+   * Clears prior room messages immediately on room change and triggers history fetch.
    */
   const handleConnect = useCallback((roomId, token) => {
-    // Clear previous error state on fresh connect attempt
-    setErrorBanner(null);
-    setActiveRoom(roomId);
+    const cleanRoomId = String(roomId).trim();
+    const cleanToken = token.trim();
+    const isRoomChange = cleanRoomId !== String(activeRoomRef.current);
 
+    // Update active room and token tracking
+    activeRoomRef.current = cleanRoomId;
+    activeTokenRef.current = cleanToken;
+    setActiveRoom(cleanRoomId);
+    setErrorBanner(null);
+    setHistoryError(null);
+
+    // Room Switching: Clear previous room's messages immediately and cancel pending fetch
+    if (isRoomChange) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setMessages([]);
+    }
+
+    // Resolve user profile for own-message styling
+    if (!currentUserRef.current) {
+      const decoded = parseJwt(cleanToken);
+      if (decoded && decoded.user_id) {
+        const initialUser = { id: decoded.user_id };
+        setCurrentUser(initialUser);
+        currentUserRef.current = initialUser;
+      }
+      fetchUserProfile(cleanToken)
+        .then((profile) => {
+          if (profile) {
+            setCurrentUser(profile);
+            currentUserRef.current = profile;
+            // Update any existing messages with current user metadata
+            setMessages((prev) => prev.map((m) => normalizeMessage(m, profile)));
+          }
+        })
+        .catch((e) => console.warn('[GeoChat] Could not load profile:', e));
+    }
+
+    // 1. Load historical messages from REST API
+    loadRoomHistory(cleanRoomId, cleanToken);
+
+    // 2. Connect or switch WebSocket connection
     chatSocket.connect({
-      roomId,
-      token,
-      onStatusChange: (status) => {
+      roomId: cleanRoomId,
+      token: cleanToken,
+      onStatusChange: (status, meta) => {
         setConnectionStatus(status);
-        if (status === ConnectionStatus.DISCONNECTED) {
-          // Keep active room in state for display
+        // On reconnect, reload history to catch up on any messages missed while disconnected
+        if (status === ConnectionStatus.CONNECTED && meta?.isReconnect) {
+          loadRoomHistory(cleanRoomId, cleanToken);
+        }
+      },
+      onOpen: ({ isReconnect }) => {
+        if (isReconnect) {
+          loadRoomHistory(cleanRoomId, cleanToken);
         }
       },
       onMessage: (payload) => {
@@ -54,8 +168,14 @@ export function App() {
 
         // 1. Valid chat message broadcast
         if (payload.type === 'message' && payload.data) {
-          setMessages((prev) => [...prev, payload.data]);
-          // Clear error banner on arrival of valid message
+          const rawMsg = payload.data;
+          // Guard against message arrived for previous room
+          if (rawMsg.room != null && String(rawMsg.room) !== String(activeRoomRef.current)) {
+            return;
+          }
+
+          // Deduplicate and merge live message with existing messages
+          setMessages((prev) => mergeMessages(prev, rawMsg, currentUserRef.current));
           setErrorBanner(null);
           return;
         }
@@ -83,15 +203,27 @@ export function App() {
         }
       },
     });
-  }, []);
+  }, [loadRoomHistory]);
 
   /**
    * Disconnect from current room.
    */
   const handleDisconnect = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     chatSocket.disconnect('User clicked Disconnect');
     setConnectionStatus(ConnectionStatus.DISCONNECTED);
+    setIsLoadingHistory(false);
+    setHistoryError(null);
   }, []);
+
+  /**
+   * Retry loading room history after error.
+   */
+  const handleRetryLoadHistory = useCallback(() => {
+    loadRoomHistory(activeRoomRef.current, activeTokenRef.current);
+  }, [loadRoomHistory]);
 
   /**
    * Send a chat message over the open WebSocket.
@@ -122,6 +254,7 @@ export function App() {
           <aside className="app-sidebar">
             <ConnectionPanel
               status={connectionStatus}
+              activeRoom={activeRoom}
               onConnect={handleConnect}
               onDisconnect={handleDisconnect}
             />
@@ -151,6 +284,10 @@ export function App() {
                   <dd><code>{API_BASE_URL}</code></dd>
                 </div>
                 <div className="info-card__item">
+                  <dt>Room History GET</dt>
+                  <dd><code>/api/chats/rooms/&lt;id&gt;/messages/</code></dd>
+                </div>
+                <div className="info-card__item">
                   <dt>WebSocket Base</dt>
                   <dd><code>{WS_BASE_URL}</code></dd>
                 </div>
@@ -161,7 +298,7 @@ export function App() {
               </dl>
               <div className="info-card__notice">
                 <p>
-                  <strong>Close Codes Handled:</strong> <code>4001</code> (Unauthorized) &amp; <code>4003</code> (Forbidden / Not Room Member).
+                  <strong>Features:</strong> Persistent REST chat history, live WebSocket broadcast deduplication, and room switching cleanup.
                 </p>
               </div>
             </section>
@@ -176,6 +313,10 @@ export function App() {
               onSendMessage={handleSendMessage}
               isConnected={connectionStatus === ConnectionStatus.CONNECTED}
               activeRoom={activeRoom}
+              isLoadingHistory={isLoadingHistory}
+              historyError={historyError}
+              onRetryLoadHistory={handleRetryLoadHistory}
+              currentUser={currentUser}
             />
           </section>
         </div>

@@ -12,10 +12,11 @@ const STORAGE_KEY_ROOM = 'geochat_room_id';
  *
  * @param {object} props
  * @param {string} props.status - Current WebSocket status
+ * @param {string|number} [props.activeRoom] - Active connected room ID
  * @param {(roomId: string|number, token: string) => void} props.onConnect
  * @param {() => void} props.onDisconnect
  */
-export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
+export const ConnectionPanel = ({ status, activeRoom, onConnect, onDisconnect }) => {
   const [token, setToken] = useState(() => {
     return localStorage.getItem(STORAGE_KEY_TOKEN) || '';
   });
@@ -44,7 +45,8 @@ export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
 
   const isConnected = status === ConnectionStatus.CONNECTED;
   const isConnecting = status === ConnectionStatus.CONNECTING;
-  const canConnect = Boolean(token.trim()) && Boolean(roomId.trim()) && !isConnected && !isConnecting;
+  const isDifferentRoom = isConnected && String(roomId).trim() !== String(activeRoom || '').trim();
+  const canConnect = Boolean(token.trim()) && Boolean(roomId.trim()) && (!isConnected || isDifferentRoom) && !isConnecting;
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -101,7 +103,7 @@ export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
                 className="form-input form-input--room"
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
-                disabled={isConnected || isConnecting}
+                disabled={isConnecting}
                 placeholder="1"
                 required
               />
@@ -120,7 +122,7 @@ export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
                     type="button"
                     className="text-btn"
                     onClick={handleClearToken}
-                    disabled={isConnected || isConnecting}
+                    disabled={isConnecting}
                   >
                     Clear
                   </button>
@@ -142,7 +144,7 @@ export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
                 className="form-input form-input--token"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                disabled={isConnected || isConnecting}
+                disabled={isConnecting}
                 placeholder="Paste your access token here (e.g. eyJhbGciOiJIUzI1Ni...)"
                 autoComplete="off"
                 spellCheck="false"
@@ -163,6 +165,41 @@ export const ConnectionPanel = ({ status, onConnect, onDisconnect }) => {
               <>
                 <span className="btn__spinner" />
                 Connecting...
+              </>
+            ) : isDifferentRoom ? (
+              <>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="16 3 21 3 21 8" />
+                  <line x1="4" y1="20" x2="21" y2="3" />
+                  <polyline points="21 16 21 21 16 21" />
+                  <line x1="15" y1="15" x2="21" y2="21" />
+                </svg>
+                Switch Room
+              </>
+            ) : isConnected ? (
+              <>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Connected
               </>
             ) : (
               <>

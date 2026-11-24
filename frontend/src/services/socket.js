@@ -33,11 +33,16 @@ export class ChatSocket {
     this.status = ConnectionStatus.DISCONNECTED;
     /** @type {string | null} */
     this.activeRoomId = null;
+    /** @type {string | null} */
+    this.activeToken = null;
     /** @type {boolean} */
     this.isManualClose = false;
+    /** @type {boolean} */
+    this.hasConnectedOnce = false;
 
     // Callbacks
     this.onStatusChange = null;
+    this.onOpen = null;
     this.onMessageReceived = null;
     this.onErrorOccurred = null;
     this.onClosed = null;
@@ -74,9 +79,10 @@ export class ChatSocket {
    * @param {(data: any) => void} [options.onMessage]
    * @param {(err: any) => void} [options.onError]
    * @param {(code: number, message: string) => void} [options.onClose]
+   * @param {({ isReconnect: boolean, roomId: string }) => void} [options.onOpen]
    * @returns {WebSocket}
    */
-  connect({ roomId, token, onStatusChange, onMessage, onError, onClose }) {
+  connect({ roomId, token, onStatusChange, onMessage, onError, onClose, onOpen }) {
     if (!roomId) {
       throw new Error('Room ID is required to connect.');
     }
@@ -86,6 +92,7 @@ export class ChatSocket {
 
     // Assign event listeners
     this.onStatusChange = onStatusChange || null;
+    this.onOpen = onOpen || null;
     this.onMessageReceived = onMessage || null;
     this.onErrorOccurred = onError || null;
     this.onClosed = onClose || null;
@@ -101,6 +108,7 @@ export class ChatSocket {
 
     const url = buildRoomWebSocketUrl(roomId, token);
     this.activeRoomId = String(roomId);
+    this.activeToken = String(token);
     this.isManualClose = false;
     this._setStatus(ConnectionStatus.CONNECTING, { roomId });
 
@@ -118,7 +126,15 @@ export class ChatSocket {
     }
 
     this.ws.onopen = () => {
-      this._setStatus(ConnectionStatus.CONNECTED, { roomId: this.activeRoomId });
+      const isReconnect = this.hasConnectedOnce;
+      this.hasConnectedOnce = true;
+      this._setStatus(ConnectionStatus.CONNECTED, {
+        roomId: this.activeRoomId,
+        isReconnect,
+      });
+      if (this.onOpen) {
+        this.onOpen({ isReconnect, roomId: this.activeRoomId });
+      }
     };
 
     this.ws.onmessage = (event) => {
@@ -211,6 +227,7 @@ export class ChatSocket {
    */
   disconnect(reason = 'User initiated disconnect') {
     this.isManualClose = true;
+    this.hasConnectedOnce = false;
     if (this.ws) {
       // Disconnect cleanly if open or connecting
       if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
@@ -223,6 +240,26 @@ export class ChatSocket {
       this.ws = null;
     }
     this._setStatus(ConnectionStatus.DISCONNECTED);
+  }
+
+  /**
+   * Reconnects to the active room using saved credentials.
+   * @returns {WebSocket | null}
+   */
+  reconnect() {
+    if (!this.activeRoomId || !this.activeToken) {
+      console.warn('[ChatSocket] Cannot reconnect: No active room or token saved.');
+      return null;
+    }
+    return this.connect({
+      roomId: this.activeRoomId,
+      token: this.activeToken,
+      onStatusChange: this.onStatusChange,
+      onOpen: this.onOpen,
+      onMessage: this.onMessageReceived,
+      onError: this.onErrorOccurred,
+      onClose: this.onClosed,
+    });
   }
 }
 
