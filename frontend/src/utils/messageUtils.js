@@ -91,6 +91,29 @@ export function sanitizeToken(token) {
 }
 
 /**
+ * Safely extracts and validates a JWT access token from an auth payload or string.
+ * Rejects URLs, origins, objects, or malformed strings.
+ *
+ * @param {any} payload - Response object (e.g. { access, refresh }) or token string
+ * @returns {string} Validated JWT access token, or empty string
+ */
+export function extractAccessToken(payload) {
+  if (typeof payload === 'string') {
+    return sanitizeToken(payload);
+  }
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+  const candidate =
+    payload.access ??
+    payload.access_token ??
+    payload.token ??
+    payload.tokens?.access ??
+    '';
+  return sanitizeToken(candidate);
+}
+
+/**
  * Normalizes a message payload from either REST API or WebSocket consumer
  * into a single canonical UI representation.
  *

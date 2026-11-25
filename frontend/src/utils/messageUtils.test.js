@@ -3,15 +3,17 @@ import {
   parseJwt,
   isValidJwt,
   sanitizeToken,
+  extractAccessToken,
   normalizeMessage,
   getMessageKey,
   sortMessagesChronologically,
   mergeMessages,
 } from './messageUtils.js';
+import { ROUTES, normalizeRoute, resolveAuthorizedRoute } from './router.js';
 
 console.log('--- Testing messageUtils.js ---');
 
-// 1. parseJwt, isValidJwt & sanitizeToken
+// 1. parseJwt, isValidJwt, sanitizeToken & extractAccessToken
 {
   // Test valid JWT with payload { "user_id": 42, "handle": "Falcon_99" }
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
@@ -21,6 +23,9 @@ console.log('--- Testing messageUtils.js ---');
 
   assert.strictEqual(isValidJwt(validToken), true);
   assert.strictEqual(sanitizeToken(validToken), validToken);
+  assert.strictEqual(extractAccessToken({ access: validToken, refresh: 'r' }), validToken);
+  assert.strictEqual(extractAccessToken({ tokens: { access: validToken } }), validToken);
+  assert.strictEqual(extractAccessToken(validToken), validToken);
 
   const decoded = parseJwt(validToken);
   assert.strictEqual(decoded.user_id, 42);
@@ -46,12 +51,15 @@ console.log('--- Testing messageUtils.js ---');
   for (const invalid of invalidCases) {
     assert.strictEqual(isValidJwt(invalid), false, `Expected isValidJwt to be false for: ${invalid}`);
     assert.strictEqual(sanitizeToken(invalid), '', `Expected sanitizeToken to return empty string for: ${invalid}`);
+    assert.strictEqual(extractAccessToken({ access: invalid }), '', `Expected extractAccessToken to reject: ${invalid}`);
   }
+  assert.strictEqual(extractAccessToken({ access: { nested: 'obj' } }), '');
+  assert.strictEqual(extractAccessToken({}), '');
 
   assert.strictEqual(parseJwt('invalid'), null);
   assert.strictEqual(parseJwt(''), null);
   assert.strictEqual(parseJwt(null), null);
-  console.log('✓ parseJwt, isValidJwt & sanitizeToken tests passed');
+  console.log('✓ parseJwt, isValidJwt, sanitizeToken & extractAccessToken tests passed');
 }
 
 // 2. normalizeMessage
@@ -198,4 +206,24 @@ console.log('--- Testing messageUtils.js ---');
   console.log('✓ Composite key fallback deduplication passed');
 }
 
-console.log('All messageUtils tests passed successfully!');
+// 5. router.js route normalization & auth guards
+{
+  assert.strictEqual(normalizeRoute('/'), ROUTES.HOME);
+  assert.strictEqual(normalizeRoute('/login/'), ROUTES.LOGIN);
+  assert.strictEqual(normalizeRoute('/discover/?foo=bar'), ROUTES.DISCOVER);
+  assert.strictEqual(normalizeRoute('/unknown'), ROUTES.HOME);
+
+  // Unauthenticated always resolves to /login
+  assert.strictEqual(resolveAuthorizedRoute('/', false), ROUTES.LOGIN);
+  assert.strictEqual(resolveAuthorizedRoute('/discover', false), ROUTES.LOGIN);
+  assert.strictEqual(resolveAuthorizedRoute('/login', false), ROUTES.LOGIN);
+
+  // Authenticated redirects /login -> / and preserves / and /discover
+  assert.strictEqual(resolveAuthorizedRoute('/login', true), ROUTES.HOME);
+  assert.strictEqual(resolveAuthorizedRoute('/', true), ROUTES.HOME);
+  assert.strictEqual(resolveAuthorizedRoute('/discover', true), ROUTES.DISCOVER);
+  console.log('✓ Route normalization & auth guard tests passed');
+}
+
+console.log('All messageUtils & router tests passed successfully!');
+

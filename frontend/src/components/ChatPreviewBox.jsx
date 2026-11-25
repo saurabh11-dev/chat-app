@@ -50,7 +50,7 @@ export const ChatPreviewBox = ({
   onDismissError,
   onSendMessage,
   isConnected = false,
-  activeRoom = '1',
+  activeRoom = null,
   activeRoomName = '',
   isLoadingHistory = false,
   historyError = null,
@@ -60,6 +60,7 @@ export const ChatPreviewBox = ({
   isJoiningRoom = false,
   onLeaveRoom,
   isLeavingRoom = false,
+  onNavigateDiscover,
 }) => {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -87,24 +88,40 @@ export const ChatPreviewBox = ({
     }
   };
 
-  const isMembershipError = Boolean(
+  const isRoomNotFound = Boolean(
+    historyError?.status === 404 ||
+    errorBanner?.code === 'ROOM_NOT_FOUND (404)'
+  );
+
+  const isMembershipError = !isRoomNotFound && Boolean(
     historyError?.status === 403 ||
     (historyError?.message && historyError.message.toLowerCase().includes('member')) ||
     errorBanner?.code === 'FORBIDDEN (4003)' ||
     (errorBanner?.detail && errorBanner.detail.toLowerCase().includes('member'))
   );
 
+  const canOfferJoinFromBanner = !isRoomNotFound && Boolean(
+    errorBanner?.code === 'FORBIDDEN (4003)' ||
+    errorBanner?.detail?.toLowerCase().includes('member')
+  );
+
+  const hasSelectedRoom = activeRoom != null && String(activeRoom).trim() !== '';
+
   return (
-    <section className="chat-box" aria-label="Live Chat Room Console">
+    <section className="chat-box" aria-label="Chat Conversation">
       {/* Console Header */}
       <div className="chat-box__header">
         <div className="chat-box__header-title">
           <span className="chat-box__pulse-indicator" />
-          <h2 className="chat-box__heading">Live Chat Preview Console</h2>
-          <span className="chat-box__room-tag">
-            Room #{activeRoom} {activeRoomName ? `· ${activeRoomName}` : ''}
-          </span>
-          {isConnected && onLeaveRoom && (
+          <h2 className="chat-box__heading">
+            {hasSelectedRoom ? (activeRoomName || `Room #${activeRoom}`) : 'GeoChat'}
+          </h2>
+          {hasSelectedRoom && (
+            <span className="chat-box__room-tag">
+              #{activeRoom}
+            </span>
+          )}
+          {hasSelectedRoom && isConnected && onLeaveRoom && (
             <button
               type="button"
               className="chat-box__leave-btn"
@@ -156,7 +173,7 @@ export const ChatPreviewBox = ({
             </div>
           </div>
           <div className="error-banner__actions">
-            {(errorBanner.code === 'FORBIDDEN (4003)' || errorBanner.detail?.toLowerCase().includes('member')) && onJoinRoom && (
+            {canOfferJoinFromBanner && onJoinRoom && (
               <button
                 type="button"
                 className="error-banner__action-btn"
@@ -304,6 +321,36 @@ export const ChatPreviewBox = ({
                 </button>
               )}
             </div>
+          ) : !hasSelectedRoom ? (
+            <div className="chat-box__empty">
+              <div className="chat-box__empty-icon">
+                <svg
+                  width="36"
+                  height="36"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <p className="chat-box__empty-title">Select a joined group to start chatting</p>
+              <p className="chat-box__empty-subtitle">
+                Pick a room from your Joined Groups list on the left, or discover new nearby rooms.
+              </p>
+              {onNavigateDiscover && (
+                <button
+                  type="button"
+                  className="chat-box__discover-btn"
+                  onClick={onNavigateDiscover}
+                >
+                  Discover Nearby Rooms
+                </button>
+              )}
+            </div>
           ) : (
             <div className="chat-box__empty">
               <div className="chat-box__empty-icon">
@@ -320,11 +367,11 @@ export const ChatPreviewBox = ({
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </div>
-              <p className="chat-box__empty-title">No messages in this session yet</p>
+              <p className="chat-box__empty-title">No messages yet</p>
               <p className="chat-box__empty-subtitle">
                 {isConnected
-                  ? 'Send a test message below to verify real-time broadcasting.'
-                  : 'Connect with a valid JWT token above to listen and broadcast.'}
+                  ? 'Say hello below to start the conversation.'
+                  : 'Connecting to room chat...'}
               </p>
             </div>
           )
@@ -379,19 +426,21 @@ export const ChatPreviewBox = ({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              isConnected
+              !hasSelectedRoom
+                ? 'Select a joined room to send messages'
+                : isConnected
                 ? 'Type a message and press Enter...'
-                : 'Connect to room to enable messaging'
+                : 'Connecting to room...'
             }
-            disabled={!isConnected}
+            disabled={!isConnected || !hasSelectedRoom}
             maxLength={2000}
             autoComplete="off"
           />
           <button
             type="submit"
             className="chat-box__send-btn"
-            disabled={!isConnected || !inputText.trim()}
-            title={isConnected ? 'Send message' : 'Connect first'}
+            disabled={!isConnected || !hasSelectedRoom || !inputText.trim()}
+            title={isConnected ? 'Send message' : 'Select and connect to a room first'}
           >
             <svg
               width="18"
@@ -410,7 +459,7 @@ export const ChatPreviewBox = ({
           </button>
         </div>
         <div className="chat-box__footer-info">
-          <span>Payload: <code>{'{ "content": "..." }'}</code></span>
+          <span>Press Enter to send</span>
           <span>Max 2000 chars • Content moderation active</span>
         </div>
       </form>

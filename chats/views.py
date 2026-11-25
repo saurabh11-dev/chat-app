@@ -1,3 +1,5 @@
+import math
+
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, views
 from rest_framework.exceptions import ValidationError
@@ -13,6 +15,51 @@ from .serializers import (
 from .utils import haversine_km
 
 
+def _extract_raw_coordinates(primary, fallback=None):
+    """Extract raw lat/lng values supporting both short ('lat'/'lng') and full ('latitude'/'longitude') keys."""
+    def _pick(short_key, long_key):
+        for source in (primary, fallback):
+            if source is None:
+                continue
+            if short_key in source:
+                return source.get(short_key)
+            if long_key in source:
+                return source.get(long_key)
+        return None
+
+    return _pick('lat', 'latitude'), _pick('lng', 'longitude')
+
+
+def _parse_coordinates(lat_raw, lng_raw):
+    """Validate and parse coordinate strings/numbers into finite (lat, lng) floats."""
+    if (lat_raw is None) != (lng_raw is None):
+        raise ValidationError(
+            {"detail": "Both 'lat' ('latitude') and 'lng' ('longitude') are required together."}
+        )
+    if lat_raw is None and lng_raw is None:
+        return None
+
+    try:
+        user_lat = float(lat_raw)
+        user_lng = float(lng_raw)
+    except (TypeError, ValueError):
+        raise ValidationError(
+            {"detail": "'lat' and 'lng' must be valid numbers."}
+        )
+
+    if not math.isfinite(user_lat) or not math.isfinite(user_lng):
+        raise ValidationError(
+            {"detail": "Coordinates must be finite numbers."}
+        )
+
+    if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
+        raise ValidationError(
+            {"detail": "Coordinates out of range (lat: -90..90, lng: -180..180)."}
+        )
+
+    return user_lat, user_lng
+
+
 class ChatRoomListCreateView(generics.ListCreateAPIView):
     serializer_class = ChatRoomSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -21,32 +68,27 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
         queryset = ChatRoom.objects.filter(is_active=True).select_related('created_by')
 
         if self.request.method == 'GET':
-            lat_param = self.request.query_params.get('lat')
-            lng_param = self.request.query_params.get('lng')
-            radius_param = self.request.query_params.get('radius', '30')
+            joined_param = str(self.request.query_params.get('joined', '')).lower()
+            if joined_param in ('true', '1', 'yes'):
+                queryset = queryset.filter(
+                    memberships__user=self.request.user,
+                    memberships__is_active=True,
+                ).distinct()
 
-            if (lat_param is not None and lng_param is None) or (
-                lng_param is not None and lat_param is None
-            ):
-                raise ValidationError(
-                    {"detail": "Both 'lat' and 'lng' query parameters are required together."}
-                )
+            lat_raw, lng_raw = _extract_raw_coordinates(self.request.query_params)
+            coords = _parse_coordinates(lat_raw, lng_raw)
 
-            if lat_param is not None and lng_param is not None:
+            if coords is not None:
+                user_lat, user_lng = coords
+                radius_param = self.request.query_params.get('radius', '30')
                 try:
-                    user_lat = float(lat_param)
-                    user_lng = float(lng_param)
                     search_radius = float(radius_param)
-                except ValueError:
+                except (TypeError, ValueError):
                     raise ValidationError(
-                        {"detail": "'lat', 'lng', and 'radius' must be valid numbers."}
+                        {"detail": "'radius' must be a valid number."}
                     )
 
-                if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
-                    raise ValidationError(
-                        {"detail": "Coordinates out of range (lat: -90..90, lng: -180..180)."}
-                    )
-                if search_radius <= 0:
+                if not math.isfinite(search_radius) or search_radius <= 0:
                     raise ValidationError(
                         {"detail": "'radius' must be greater than 0."}
                     )
@@ -79,17 +121,53 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
         )
 
 
+class JoinedRoomListView(generics.ListAPIView):
+    serializer_class = ChatRoomSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ChatRoom.objects.filter(
+                is_active=True,
+                memberships__user=self.request.user,
+                memberships__is_active=True,
+            )
+            .select_related('created_by')
+            .order_by('-memberships__joined_at')
+            .distinct()
+        )
+
+
+class ChatRoomDetailView(generics.RetrieveAPIView):
+    serializer_class = ChatRoomSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        room = get_object_or_404(
+            ChatRoom.objects.select_related('created_by'),
+            pk=self.kwargs['pk'],
+            is_active=True,
+        )
+        lat_raw, lng_raw = _extract_raw_coordinates(self.request.query_params)
+        coords = _parse_coordinates(lat_raw, lng_raw)
+        if coords is not None:
+            room.distance_km = haversine_km(
+                coords[0], coords[1], room.latitude, room.longitude
+            )
+        return room
+
+
 class RoomJoinView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, pk):
         room = get_object_or_404(ChatRoom, pk=pk, is_active=True)
 
-        lat = request.data.get('lat') if 'lat' in request.data else request.query_params.get('lat')
-        lng = request.data.get('lng') if 'lng' in request.data else request.query_params.get('lng')
+        lat_raw, lng_raw = _extract_raw_coordinates(request.data, request.query_params)
+        coords = _parse_coordinates(lat_raw, lng_raw)
 
-        if lat is None or lng is None:
-            # If already an active member, allow entering
+        if coords is None:
+            # If already an active member, allow entering without re-submitting location
             existing = RoomMembership.objects.filter(
                 room=room, user=request.user, is_active=True
             ).first()
@@ -101,26 +179,14 @@ class RoomJoinView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            user_lat = float(lat)
-            user_lng = float(lng)
-        except ValueError:
-            return Response(
-                {"detail": "'lat' and 'lng' must be valid numbers."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not (-90 <= user_lat <= 90) or not (-180 <= user_lng <= 180):
-            return Response(
-                {"detail": "Coordinates out of range."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+        user_lat, user_lng = coords
         dist = haversine_km(user_lat, user_lng, room.latitude, room.longitude)
         if dist > float(room.radius_km):
             return Response(
                 {
-                    "detail": f"You are {dist:.2f} km away; room geofence radius is {room.radius_km} km."
+                    "detail": f"You are {dist:.2f} km away; room geofence radius is {room.radius_km} km.",
+                    "distance_km": dist,
+                    "radius_km": float(room.radius_km),
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -134,6 +200,7 @@ class RoomJoinView(views.APIView):
 
         serializer = RoomMembershipSerializer(membership)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 
 class RoomLeaveView(views.APIView):

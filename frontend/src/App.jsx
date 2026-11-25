@@ -1,46 +1,154 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Navbar from './components/Navbar';
-import ConnectionPanel from './components/ConnectionPanel';
+import AuthPanel from './components/AuthPanel';
+import JoinedRoomsSidebar from './components/JoinedRoomsSidebar';
+import DiscoverRoomsView from './components/DiscoverRoomsView';
 import ChatPreviewBox from './components/ChatPreviewBox';
 import { chatSocket, ConnectionStatus } from './services/socket';
 import {
   fetchRoomMessages,
   fetchUserProfile,
+  fetchJoinedRooms,
+  fetchNearbyRooms,
+  fetchRooms,
+  fetchRoomDetail,
   joinRoom,
   leaveRoom,
-  fetchNearbyRooms,
 } from './services/chatApi';
-import { mergeMessages, parseJwt, normalizeMessage, isValidJwt } from './utils/messageUtils';
-import { API_BASE_URL, WS_BASE_URL } from './config/env';
+import {
+  mergeMessages,
+  parseJwt,
+  normalizeMessage,
+  isValidJwt,
+  sanitizeToken,
+} from './utils/messageUtils';
+import { ROUTES, resolveAuthorizedRoute } from './utils/router';
 import './App.css';
+
+const STORAGE_KEY_TOKEN = 'geochat_jwt_token';
+const STORAGE_KEY_REFRESH = 'geochat_refresh_token';
+const STORAGE_KEY_LAT = 'geochat_lat';
+const STORAGE_KEY_LNG = 'geochat_lng';
+
+function readStorage(key, fallback) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 /**
  * GeoChat Main Application
  *
- * Coordinates WebSocket connection state, persistent room history loading,
- * deduplicated message merging, race-condition mitigation, and modular subcomponents.
+ * Route-synced multi-view flow:
+ * - /login: Sign In / Create Account (when unauthenticated)
+ * - /: Joined Groups Sidebar + Focused Chat Conversation Panel
+ * - /discover: Location detection & Geofenced Room Discovery / Join
  */
 export function App() {
+  const initialToken = sanitizeToken(readStorage(STORAGE_KEY_TOKEN, ''));
+  const initialLat = readStorage(STORAGE_KEY_LAT, '25.2893');
+  const initialLng = readStorage(STORAGE_KEY_LNG, '83.0064');
+
+  const [token, setToken] = useState(initialToken);
+  const isAuthenticated = isValidJwt(token);
+
+  const [route, setRoute] = useState(() =>
+    typeof window !== 'undefined'
+      ? resolveAuthorizedRoute(window.location.pathname, isValidJwt(initialToken))
+      : ROUTES.LOGIN
+  );
+
   const [connectionStatus, setConnectionStatus] = useState(ConnectionStatus.DISCONNECTED);
-  const [activeRoom, setActiveRoom] = useState('1');
-  const [activeRoomName, setActiveRoomName] = useState('Assi Ghat Hangout');
+  const [activeRoom, setActiveRoom] = useState(null);
+  const [activeRoomName, setActiveRoomName] = useState('');
+  const [lat, setLat] = useState(initialLat);
+  const [lng, setLng] = useState(initialLng);
+
+  const [currentUser, setCurrentUser] = useState(null);
+  const [joinedRooms, setJoinedRooms] = useState([]);
+  const [isLoadingJoined, setIsLoadingJoined] = useState(false);
+  const [joinedError, setJoinedError] = useState(null);
+
+  const [discoverRooms, setDiscoverRooms] = useState([]);
+  const [roomListMode, setRoomListMode] = useState('nearby');
+  const [isLoadingDiscover, setIsLoadingDiscover] = useState(false);
+  const [discoverError, setDiscoverError] = useState(null);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [isLeavingRoom, setIsLeavingRoom] = useState(false);
+
   const [messages, setMessages] = useState([]);
   const [errorBanner, setErrorBanner] = useState(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
-  const [isLeavingRoom, setIsLeavingRoom] = useState(false);
-  const [nearbyRooms, setNearbyRooms] = useState([]);
-  const [isLoadingNearbyRooms, setIsLoadingNearbyRooms] = useState(false);
 
-  // References to maintain fresh values in asynchronous callbacks and event listeners
-  const activeRoomRef = useRef('1');
-  const activeTokenRef = useRef('');
+  // Fresh refs for async callbacks and popstate listeners
+  const activeRoomRef = useRef(null);
+  const activeTokenRef = useRef(initialToken);
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  const latRef = useRef(initialLat);
+  const lngRef = useRef(initialLng);
   const currentUserRef = useRef(null);
   const abortControllerRef = useRef(null);
 
-  // Clean up WebSocket connection and pending fetch requests when application unmounts
+  isAuthenticatedRef.current = isAuthenticated;
+
+  const navigate = useCallback((targetPath, { replace = false } = {}) => {
+    const resolved = resolveAuthorizedRoute(targetPath, isAuthenticatedRef.current);
+    if (typeof window !== 'undefined' && window.location.pathname !== resolved) {
+      if (replace) {
+        window.history.replaceState({}, '', resolved);
+      } else {
+        window.history.pushState({}, '', resolved);
+      }
+    }
+    setRoute(resolved);
+  }, []);
+
+  // Enforce route auth guard on auth changes and browser back/forward
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const resolved = resolveAuthorizedRoute(window.location.pathname, isAuthenticated);
+    if (window.location.pathname !== resolved) {
+      window.history.replaceState({}, '', resolved);
+    }
+    setRoute(resolved);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = () => {
+      const resolved = resolveAuthorizedRoute(
+        window.location.pathname,
+        isAuthenticatedRef.current
+      );
+      if (window.location.pathname !== resolved) {
+        window.history.replaceState({}, '', resolved);
+      }
+      setRoute(resolved);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Persist coordinates
+  useEffect(() => {
+    latRef.current = lat;
+    try {
+      if (lat !== '') localStorage.setItem(STORAGE_KEY_LAT, lat);
+    } catch {}
+  }, [lat]);
+
+  useEffect(() => {
+    lngRef.current = lng;
+    try {
+      if (lng !== '') localStorage.setItem(STORAGE_KEY_LNG, lng);
+    } catch {}
+  }, [lng]);
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -50,21 +158,80 @@ export function App() {
     };
   }, []);
 
-  /**
-   * Clears the current active error banner.
-   */
-  const handleDismissError = useCallback(() => {
-    setErrorBanner(null);
+  const loadJoinedRooms = useCallback(async (authToken, signal) => {
+    const clean = sanitizeToken(authToken || activeTokenRef.current);
+    if (!clean) return [];
+    setIsLoadingJoined(true);
+    setJoinedError(null);
+    try {
+      const rooms = await fetchJoinedRooms({ token: clean, signal });
+      if (!signal?.aborted) {
+        setJoinedRooms(rooms);
+      }
+      return rooms;
+    } catch (err) {
+      if (err.name !== 'AbortError' && !signal?.aborted) {
+        setJoinedError(err.message || 'Failed to load joined rooms.');
+      }
+      return [];
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoadingJoined(false);
+      }
+    }
   }, []);
 
-  /**
-   * Fetches room message history from REST API and merges with existing messages.
-   * Cancels prior in-flight requests and guards against room-switch race conditions.
-   */
-  const loadRoomHistory = useCallback(async (roomId, token) => {
-    if (!roomId || !token || !isValidJwt(token)) return;
+  // Sync token -> profile & joined rooms
+  useEffect(() => {
+    const clean = sanitizeToken(token);
+    activeTokenRef.current = clean;
 
-    // Abort prior in-flight request to prevent race conditions
+    try {
+      if (clean) {
+        localStorage.setItem(STORAGE_KEY_TOKEN, clean);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
+      }
+    } catch {}
+
+    if (!clean) {
+      setCurrentUser(null);
+      currentUserRef.current = null;
+      setJoinedRooms([]);
+      return;
+    }
+
+    const decoded = parseJwt(clean);
+    if (decoded?.user_id) {
+      const seedUser = { id: decoded.user_id };
+      setCurrentUser((prev) => (prev?.id === decoded.user_id ? prev : seedUser));
+      currentUserRef.current =
+        currentUserRef.current?.id === decoded.user_id ? currentUserRef.current : seedUser;
+    }
+
+    const controller = new AbortController();
+    fetchUserProfile(clean, controller.signal)
+      .then((profile) => {
+        if (!controller.signal.aborted && profile) {
+          setCurrentUser(profile);
+          currentUserRef.current = profile;
+          setMessages((prev) => prev.map((m) => normalizeMessage(m, profile)));
+        }
+      })
+      .catch(() => {});
+
+    loadJoinedRooms(clean, controller.signal);
+
+    return () => controller.abort();
+  }, [token, loadJoinedRooms]);
+
+  /**
+   * Fetches room message history from REST API and merges with live messages.
+   * Uses AbortController & activeRoomRef guard to prevent room-switch race conditions.
+   */
+  const loadRoomHistory = useCallback(async (roomId, authToken) => {
+    if (!roomId || !authToken || !isValidJwt(authToken)) return;
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -77,28 +244,23 @@ export function App() {
     try {
       const rawHistory = await fetchRoomMessages({
         roomId,
-        token,
+        token: authToken,
         signal: controller.signal,
       });
 
-      // Active room guard: Check if user switched rooms while request was in-flight
       if (String(activeRoomRef.current) !== String(roomId)) {
         return;
       }
 
-      // Merge historical messages with any live messages already received in-flight
       setMessages((prev) => mergeMessages(prev, rawHistory, currentUserRef.current));
       setHistoryError(null);
     } catch (err) {
       if (err.name === 'AbortError' || controller.signal.aborted) {
-        // Ignored aborted fetch
         return;
       }
-
       if (String(activeRoomRef.current) !== String(roomId)) {
         return;
       }
-
       console.error(`[GeoChat] History fetch error for room ${roomId}:`, err);
       setHistoryError({
         message: err.message || 'Failed to load room message history.',
@@ -112,31 +274,32 @@ export function App() {
   }, []);
 
   /**
-   * Connect to specified Room ID using provided JWT Access Token.
-   * Clears prior room messages immediately on room change and triggers history fetch.
+   * Connects to a room (loads REST history + opens WebSocket).
    */
-  const handleConnect = useCallback((roomId, token) => {
+  const handleConnect = useCallback((roomId, authToken, roomNameHint = '') => {
     const cleanRoomId = String(roomId).trim();
-    const cleanToken = (token || '').trim();
+    const cleanToken = sanitizeToken(authToken || activeTokenRef.current);
 
-    if (!isValidJwt(cleanToken)) {
-      setErrorBanner({
-        code: 'INVALID_TOKEN',
-        detail: 'Invalid JWT Access Token. URLs, origins, or non-JWT strings cannot be used as tokens.',
-      });
+    if (!cleanRoomId || !cleanToken) {
       return;
     }
 
-    const isRoomChange = cleanRoomId !== String(activeRoomRef.current);
-
-    // Update active room and token tracking
+    const isRoomChange = cleanRoomId !== String(activeRoomRef.current || '');
     activeRoomRef.current = cleanRoomId;
     activeTokenRef.current = cleanToken;
     setActiveRoom(cleanRoomId);
     setErrorBanner(null);
     setHistoryError(null);
 
-    // Room Switching: Clear previous room's messages immediately and cancel pending fetch
+    if (roomNameHint) {
+      setActiveRoomName(roomNameHint);
+    } else {
+      const match =
+        joinedRooms.find((r) => String(r.id) === cleanRoomId) ||
+        discoverRooms.find((r) => String(r.id) === cleanRoomId);
+      setActiveRoomName(match ? match.name : '');
+    }
+
     if (isRoomChange) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -144,36 +307,29 @@ export function App() {
       setMessages([]);
     }
 
-    // Resolve user profile for own-message styling
-    if (!currentUserRef.current) {
-      const decoded = parseJwt(cleanToken);
-      if (decoded && decoded.user_id) {
-        const initialUser = { id: decoded.user_id };
-        setCurrentUser(initialUser);
-        currentUserRef.current = initialUser;
-      }
-      fetchUserProfile(cleanToken)
-        .then((profile) => {
-          if (profile) {
-            setCurrentUser(profile);
-            currentUserRef.current = profile;
-            // Update any existing messages with current user metadata
-            setMessages((prev) => prev.map((m) => normalizeMessage(m, profile)));
+    // Ensure room name is resolved even if navigated directly
+    if (!roomNameHint) {
+      fetchRoomDetail({
+        roomId: cleanRoomId,
+        token: cleanToken,
+        lat: latRef.current,
+        lng: lngRef.current,
+      })
+        .then((room) => {
+          if (String(activeRoomRef.current) === cleanRoomId && room?.name) {
+            setActiveRoomName(room.name);
           }
         })
-        .catch((e) => console.warn('[GeoChat] Could not load profile:', e));
+        .catch(() => {});
     }
 
-    // 1. Load historical messages from REST API
     loadRoomHistory(cleanRoomId, cleanToken);
 
-    // 2. Connect or switch WebSocket connection
     chatSocket.connect({
       roomId: cleanRoomId,
       token: cleanToken,
       onStatusChange: (status, meta) => {
         setConnectionStatus(status);
-        // On reconnect, reload history to catch up on any messages missed while disconnected
         if (status === ConnectionStatus.CONNECTED && meta?.isReconnect) {
           loadRoomHistory(cleanRoomId, cleanToken);
         }
@@ -186,21 +342,16 @@ export function App() {
       onMessage: (payload) => {
         if (!payload || typeof payload !== 'object') return;
 
-        // 1. Valid chat message broadcast
         if (payload.type === 'message' && payload.data) {
           const rawMsg = payload.data;
-          // Guard against message arrived for previous room
           if (rawMsg.room != null && String(rawMsg.room) !== String(activeRoomRef.current)) {
             return;
           }
-
-          // Deduplicate and merge live message with existing messages
           setMessages((prev) => mergeMessages(prev, rawMsg, currentUserRef.current));
           setErrorBanner(null);
           return;
         }
 
-        // 2. Validation / Content moderation error (e.g. ABUSIVE_CONTENT)
         if (payload.type === 'error') {
           setErrorBanner({
             code: payload.code || 'MESSAGE_REJECTED',
@@ -223,139 +374,192 @@ export function App() {
         }
       },
     });
-  }, [loadRoomHistory]);
+  }, [loadRoomHistory, joinedRooms, discoverRooms]);
 
-  /**
-   * Disconnect from current room.
-   */
-  const handleDisconnect = useCallback(() => {
+  const handleSelectJoinedRoom = useCallback(
+    (room) => {
+      if (!room) return;
+      handleConnect(room.id, activeTokenRef.current, room.name);
+    },
+    [handleConnect]
+  );
+
+  const handleAuthSuccess = useCallback(({ access, refresh, user }) => {
+    const cleanAccess = sanitizeToken(access);
+    if (!cleanAccess) return;
+
+    activeTokenRef.current = cleanAccess;
+    isAuthenticatedRef.current = true;
+    setToken(cleanAccess);
+
+    try {
+      localStorage.setItem(STORAGE_KEY_TOKEN, cleanAccess);
+      if (refresh && isValidJwt(refresh)) {
+        localStorage.setItem(STORAGE_KEY_REFRESH, refresh);
+      }
+    } catch {}
+
+    if (user && typeof user === 'object' && user.handle) {
+      setCurrentUser(user);
+      currentUserRef.current = user;
+    }
+
+    setErrorBanner(null);
+    setDiscoverError(null);
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', ROUTES.HOME);
+    }
+    setRoute(ROUTES.HOME);
+  }, []);
+
+  const handleSignOut = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    chatSocket.disconnect('User clicked Disconnect');
+    chatSocket.disconnect('User signed out');
     setConnectionStatus(ConnectionStatus.DISCONNECTED);
-    setIsLoadingHistory(false);
+    activeTokenRef.current = '';
+    isAuthenticatedRef.current = false;
+    activeRoomRef.current = null;
+    setToken('');
+    setActiveRoom(null);
+    setActiveRoomName('');
+    setCurrentUser(null);
+    currentUserRef.current = null;
+    setJoinedRooms([]);
+    setDiscoverRooms([]);
+    setMessages([]);
     setHistoryError(null);
+    setErrorBanner(null);
+    setDiscoverError(null);
+    setJoinedError(null);
+    setIsLoadingHistory(false);
+    try {
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+      localStorage.removeItem(STORAGE_KEY_REFRESH);
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', ROUTES.LOGIN);
+    }
+    setRoute(ROUTES.LOGIN);
   }, []);
 
-  /**
-   * Retry loading room history after error.
-   */
-  const handleRetryLoadHistory = useCallback(() => {
-    loadRoomHistory(activeRoomRef.current, activeTokenRef.current);
-  }, [loadRoomHistory]);
+  const handleDiscoverRooms = useCallback(async (latArg, lngArg, { includeAll = false } = {}) => {
+    const cleanToken = sanitizeToken(activeTokenRef.current);
+    if (!cleanToken) return;
 
-  /**
-   * Discovers active chat rooms within 30 km radius of given coordinates.
-   */
-  const handleDiscoverRooms = useCallback(async (lat, lng, token) => {
-    const cleanToken = (token || activeTokenRef.current || '').trim();
-    if (!isValidJwt(cleanToken)) {
-      setErrorBanner({
-        code: 'INVALID_TOKEN',
-        detail: 'A valid JWT Access Token is required to discover nearby rooms.',
-      });
-      return;
-    }
+    const targetLat = latArg ?? latRef.current;
+    const targetLng = lngArg ?? lngRef.current;
 
-    setIsLoadingNearbyRooms(true);
-    setErrorBanner(null);
+    setIsLoadingDiscover(true);
+    setDiscoverError(null);
+    setRoomListMode(includeAll ? 'all' : 'nearby');
+
     try {
-      const rooms = await fetchNearbyRooms({ token: cleanToken, lat, lng, radius: 30 });
-      setNearbyRooms(rooms);
-      const match = rooms.find((r) => String(r.id) === String(activeRoomRef.current));
-      if (match) {
-        setActiveRoomName(match.name);
-      }
+      const rooms = includeAll
+        ? await fetchRooms({ token: cleanToken })
+        : await fetchNearbyRooms({
+            token: cleanToken,
+            lat: targetLat,
+            lng: targetLng,
+            radius: 30,
+          });
+      setDiscoverRooms(rooms);
     } catch (err) {
       console.error('[GeoChat] Discover rooms error:', err);
-      setErrorBanner({
-        code: 'DISCOVERY_FAILED',
-        detail: err.message || 'Failed to discover nearby rooms.',
-      });
+      setDiscoverError(err.message || 'Failed to discover rooms.');
     } finally {
-      setIsLoadingNearbyRooms(false);
+      setIsLoadingDiscover(false);
     }
   }, []);
 
-  /**
-   * Joins a room by verifying location coordinates against room geofence (30 km),
-   * activating RoomMembership, then automatically connecting to chat.
-   */
-  const handleJoinRoom = useCallback(async (roomId, token, lat, lng) => {
-    const targetRoomId = String(roomId || activeRoomRef.current || '1').trim();
-    const targetToken = (token || activeTokenRef.current || '').trim();
+  const handleJoinRoom = useCallback(
+    async (roomId, latArg, lngArg) => {
+      const targetRoomId = String(roomId || activeRoomRef.current || '').trim();
+      const cleanToken = sanitizeToken(activeTokenRef.current);
+      const targetLat = latArg !== undefined ? latArg : latRef.current;
+      const targetLng = lngArg !== undefined ? lngArg : lngRef.current;
 
-    if (!isValidJwt(targetToken)) {
-      setErrorBanner({
-        code: 'INVALID_TOKEN',
-        detail: 'A valid JWT Access Token is required to join a room.',
-      });
-      return;
-    }
+      if (!targetRoomId || !cleanToken) return;
 
-    setIsJoiningRoom(true);
-    try {
-      await joinRoom({ roomId: targetRoomId, token: targetToken, lat, lng });
-      setErrorBanner(null);
-      setHistoryError(null);
-      // Mark as joined in nearbyRooms list
-      setNearbyRooms((prev) =>
-        prev.map((r) => (String(r.id) === targetRoomId ? { ...r, is_member: true } : r))
-      );
-      // Automatically connect and load history for the newly joined room
-      handleConnect(targetRoomId, targetToken);
-    } catch (err) {
-      console.error(`[GeoChat] Failed to join room ${targetRoomId}:`, err);
-      setErrorBanner({
-        code: err.status === 400 ? 'GEOFENCE_REJECTED' : 'JOIN_FAILED',
-        detail: err.message || 'Failed to join room.',
-      });
-    } finally {
-      setIsJoiningRoom(false);
-    }
-  }, [handleConnect]);
+      setIsJoiningRoom(true);
+      setJoiningRoomId(targetRoomId);
+      setDiscoverError(null);
 
-  /**
-   * Leaves a room anytime, deactivating RoomMembership.
-   */
+      try {
+        const joinRes = await joinRoom({
+          roomId: targetRoomId,
+          token: cleanToken,
+          lat: targetLat,
+          lng: targetLng,
+        });
+
+        setDiscoverRooms((prev) =>
+          prev.map((r) => (String(r.id) === targetRoomId ? { ...r, is_member: true } : r))
+        );
+
+        const refreshed = await loadJoinedRooms(cleanToken);
+        const joinedMatch = refreshed.find((r) => String(r.id) === targetRoomId);
+        const roomNameHint = joinedMatch?.name || joinRes?.room_name || '';
+
+        navigate(ROUTES.HOME);
+        handleConnect(targetRoomId, cleanToken, roomNameHint);
+      } catch (err) {
+        console.error(`[GeoChat] Failed to join room ${targetRoomId}:`, err);
+        const detail = err.message || 'Failed to join room.';
+        setDiscoverError(detail);
+        setErrorBanner({
+          code: err.status === 400 ? 'OUTSIDE_GEOFENCE' : 'JOIN_FAILED',
+          detail,
+        });
+      } finally {
+        setIsJoiningRoom(false);
+        setJoiningRoomId(null);
+      }
+    },
+    [handleConnect, loadJoinedRooms, navigate]
+  );
+
+  const handleOpenJoinedFromDiscover = useCallback(
+    (room) => {
+      if (!room) return;
+      navigate(ROUTES.HOME);
+      handleConnect(room.id, activeTokenRef.current, room.name);
+    },
+    [handleConnect, navigate]
+  );
+
   const handleLeaveRoom = useCallback(async (roomId) => {
-    const targetRoomId = String(roomId || activeRoomRef.current || '1').trim();
-    const targetToken = (activeTokenRef.current || '').trim();
-
-    if (!isValidJwt(targetToken)) {
-      setErrorBanner({
-        code: 'INVALID_TOKEN',
-        detail: 'A valid JWT Access Token is required to leave a room.',
-      });
-      return;
-    }
+    const targetRoomId = String(roomId || activeRoomRef.current || '').trim();
+    const cleanToken = sanitizeToken(activeTokenRef.current);
+    if (!targetRoomId || !cleanToken) return;
 
     setIsLeavingRoom(true);
     try {
-      const res = await leaveRoom({ roomId: targetRoomId, token: targetToken });
-      // Update nearbyRooms is_member to false
-      setNearbyRooms((prev) =>
+      const res = await leaveRoom({ roomId: targetRoomId, token: cleanToken });
+      setJoinedRooms((prev) => prev.filter((r) => String(r.id) !== targetRoomId));
+      setDiscoverRooms((prev) =>
         prev.map((r) => (String(r.id) === targetRoomId ? { ...r, is_member: false } : r))
       );
 
-      // If leaving currently active connected room, disconnect and clear messages
-      if (targetRoomId === String(activeRoomRef.current)) {
+      if (targetRoomId === String(activeRoomRef.current || '')) {
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
         }
-        chatSocket.disconnect('User clicked Leave Room');
+        chatSocket.disconnect('User left room');
         setConnectionStatus(ConnectionStatus.DISCONNECTED);
+        activeRoomRef.current = null;
+        setActiveRoom(null);
+        setActiveRoomName('');
         setMessages([]);
         setHistoryError(null);
       }
 
       setErrorBanner({
         code: 'ROOM_LEFT',
-        detail: res.detail || `You have left Room #${targetRoomId}.`,
+        detail: res.detail || `You left Room #${targetRoomId}.`,
       });
     } catch (err) {
-      console.error(`[GeoChat] Failed to leave room ${targetRoomId}:`, err);
       setErrorBanner({
         code: 'LEAVE_FAILED',
         detail: err.message || 'Failed to leave room.',
@@ -365,13 +569,14 @@ export function App() {
     }
   }, []);
 
-  /**
-   * Send a chat message over the open WebSocket.
-   */
-  const handleSendMessage = useCallback((text) => {
-    // UX Rule: Automatically clear error banners when sending a new message
-    setErrorBanner(null);
+  const handleRetryLoadHistory = useCallback(() => {
+    if (activeRoomRef.current && activeTokenRef.current) {
+      loadRoomHistory(activeRoomRef.current, activeTokenRef.current);
+    }
+  }, [loadRoomHistory]);
 
+  const handleSendMessage = useCallback((text) => {
+    setErrorBanner(null);
     const result = chatSocket.sendMessage(text);
     if (!result.success && result.error) {
       setErrorBanner({
@@ -386,101 +591,71 @@ export function App() {
       <Navbar
         status={connectionStatus}
         activeRoom={connectionStatus === ConnectionStatus.CONNECTED ? activeRoom : null}
+        currentRoute={route}
+        onNavigate={navigate}
+        isAuthenticated={isAuthenticated}
+        currentUser={currentUser}
+        onSignOut={handleSignOut}
       />
 
       <main className="app-main">
-        <div className="app-layout">
-          {/* Left Column: Connection & Information Controls */}
-          <aside className="app-sidebar">
-            <ConnectionPanel
-              status={connectionStatus}
+        {!isAuthenticated || route === ROUTES.LOGIN ? (
+          <AuthPanel onAuthSuccess={handleAuthSuccess} />
+        ) : route === ROUTES.DISCOVER ? (
+          <DiscoverRoomsView
+            lat={lat}
+            lng={lng}
+            onLatChange={setLat}
+            onLngChange={setLng}
+            rooms={discoverRooms}
+            roomListMode={roomListMode}
+            isLoadingRooms={isLoadingDiscover}
+            isJoiningRoom={isJoiningRoom}
+            joiningRoomId={joiningRoomId}
+            actionError={discoverError}
+            onDismissError={() => setDiscoverError(null)}
+            onDiscoverRooms={handleDiscoverRooms}
+            onJoinRoom={handleJoinRoom}
+            onOpenJoinedRoom={handleOpenJoinedFromDiscover}
+            onBackToChats={() => navigate(ROUTES.HOME)}
+          />
+        ) : (
+          <div className="app-layout">
+            <JoinedRoomsSidebar
+              joinedRooms={joinedRooms}
               activeRoom={activeRoom}
-              activeRoomName={activeRoomName}
-              onConnect={handleConnect}
-              onDisconnect={handleDisconnect}
-              onJoinRoom={handleJoinRoom}
-              onLeaveRoom={handleLeaveRoom}
-              isJoiningRoom={isJoiningRoom}
-              isLeavingRoom={isLeavingRoom}
-              nearbyRooms={nearbyRooms}
-              isLoadingNearbyRooms={isLoadingNearbyRooms}
-              onDiscoverRooms={handleDiscoverRooms}
-            />
-
-            {/* Contract & Debug Overview Card */}
-            <section className="info-card">
-              <h3 className="info-card__title">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 16v-4" />
-                  <path d="M12 8h.01" />
-                </svg>
-                Backend Endpoints
-              </h3>
-              <dl className="info-card__list">
-                <div className="info-card__item">
-                  <dt>HTTP API Base</dt>
-                  <dd><code>{API_BASE_URL}</code></dd>
-                </div>
-                <div className="info-card__item">
-                  <dt>Nearby Groups GET</dt>
-                  <dd><code>/api/chats/rooms/?lat=&amp;lng=&amp;radius=30</code></dd>
-                </div>
-                <div className="info-card__item">
-                  <dt>Room Join POST</dt>
-                  <dd><code>/api/chats/rooms/&lt;id&gt;/join/</code></dd>
-                </div>
-                <div className="info-card__item">
-                  <dt>Room Leave POST</dt>
-                  <dd><code>/api/chats/rooms/&lt;id&gt;/leave/</code></dd>
-                </div>
-                <div className="info-card__item">
-                  <dt>Room History GET</dt>
-                  <dd><code>/api/chats/rooms/&lt;id&gt;/messages/</code></dd>
-                </div>
-                <div className="info-card__item">
-                  <dt>WebSocket Endpoint</dt>
-                  <dd><code>/ws/chats/rooms/&lt;id&gt;/?token=&lt;jwt&gt;</code></dd>
-                </div>
-              </dl>
-              <div className="info-card__notice">
-                <p>
-                  <strong>Geofence Rules:</strong> Discover groups in 30 km range. Location is checked when joining. Chat freely afterwards and leave anytime.
-                </p>
-              </div>
-            </section>
-          </aside>
-
-          {/* Right Column: Live Chat Console */}
-          <section className="app-content">
-            <ChatPreviewBox
-              messages={messages}
-              errorBanner={errorBanner}
-              onDismissError={handleDismissError}
-              onSendMessage={handleSendMessage}
               isConnected={connectionStatus === ConnectionStatus.CONNECTED}
-              activeRoom={activeRoom}
-              activeRoomName={activeRoomName}
-              isLoadingHistory={isLoadingHistory}
-              historyError={historyError}
-              onRetryLoadHistory={handleRetryLoadHistory}
-              currentUser={currentUser}
-              onJoinRoom={handleJoinRoom}
-              isJoiningRoom={isJoiningRoom}
+              isLoading={isLoadingJoined}
+              error={joinedError}
+              onSelectRoom={handleSelectJoinedRoom}
+              onRefresh={() => loadJoinedRooms(activeTokenRef.current)}
+              onNavigateDiscover={() => navigate(ROUTES.DISCOVER)}
               onLeaveRoom={handleLeaveRoom}
               isLeavingRoom={isLeavingRoom}
             />
-          </section>
-        </div>
+
+            <section className="app-content">
+              <ChatPreviewBox
+                messages={messages}
+                errorBanner={errorBanner}
+                onDismissError={() => setErrorBanner(null)}
+                onSendMessage={handleSendMessage}
+                isConnected={connectionStatus === ConnectionStatus.CONNECTED}
+                activeRoom={activeRoom}
+                activeRoomName={activeRoomName}
+                isLoadingHistory={isLoadingHistory}
+                historyError={historyError}
+                onRetryLoadHistory={handleRetryLoadHistory}
+                currentUser={currentUser}
+                onJoinRoom={(id) => handleJoinRoom(id)}
+                isJoiningRoom={isJoiningRoom}
+                onLeaveRoom={handleLeaveRoom}
+                isLeavingRoom={isLeavingRoom}
+                onNavigateDiscover={() => navigate(ROUTES.DISCOVER)}
+              />
+            </section>
+          </div>
+        )}
       </main>
     </div>
   );

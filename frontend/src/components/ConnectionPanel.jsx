@@ -4,20 +4,23 @@ import { isValidJwt } from '../utils/messageUtils';
 import { getBrowserLocation, LOCATION_PRESETS } from '../utils/geolocation';
 import './ConnectionPanel.css';
 
-const STORAGE_KEY_TOKEN = 'geochat_jwt_token';
-const STORAGE_KEY_ROOM = 'geochat_room_id';
-const STORAGE_KEY_LAT = 'geochat_lat';
-const STORAGE_KEY_LNG = 'geochat_lng';
-
 /**
  * ConnectionPanel Component
- * Coordinates JWT Authentication, HTML5 Geolocation detection,
+ * Coordinates JWT Authentication, direct Room ID connection, HTML5 Geolocation detection,
  * 30 km radius group discovery, joining/leaving groups, and WebSocket connection.
  */
 export const ConnectionPanel = ({
   status,
   activeRoom,
   activeRoomName,
+  token = '',
+  onTokenChange,
+  onOpenAuth,
+  onSignOut,
+  lat,
+  lng,
+  onLatChange,
+  onLngChange,
   onConnect,
   onDisconnect,
   onJoinRoom,
@@ -25,53 +28,23 @@ export const ConnectionPanel = ({
   isJoiningRoom = false,
   isLeavingRoom = false,
   nearbyRooms = [],
+  roomListMode = 'nearby',
   isLoadingNearbyRooms = false,
   onDiscoverRooms,
+  roomActionError = null,
+  onDismissRoomActionError,
 }) => {
-  const [token, setToken] = useState(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_TOKEN);
-      if (stored) {
-        if (isValidJwt(stored)) return stored.trim();
-        localStorage.removeItem(STORAGE_KEY_TOKEN);
-      }
-    } catch {}
-    return '';
-  });
-
-  const [roomId, setRoomId] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY_ROOM) || '1';
-  });
-
-  const [lat, setLat] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY_LAT) || '25.2893';
-  });
-
-  const [lng, setLng] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY_LNG) || '83.0064';
-  });
-
+  const [roomId, setRoomId] = useState(() => String(activeRoom || '1'));
   const [showToken, setShowToken] = useState(false);
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [gpsNotice, setGpsNotice] = useState(null);
 
-  // Sync state to localStorage
+  // Keep Room ID input synced when activeRoom changes from discovery/join actions
   useEffect(() => {
-    if (token && isValidJwt(token)) {
-      localStorage.setItem(STORAGE_KEY_TOKEN, token.trim());
-    } else {
-      localStorage.removeItem(STORAGE_KEY_TOKEN);
+    if (activeRoom != null) {
+      setRoomId(String(activeRoom));
     }
-  }, [token]);
-
-  useEffect(() => {
-    if (roomId) localStorage.setItem(STORAGE_KEY_ROOM, roomId);
-  }, [roomId]);
-
-  useEffect(() => {
-    if (lat) localStorage.setItem(STORAGE_KEY_LAT, lat);
-    if (lng) localStorage.setItem(STORAGE_KEY_LNG, lng);
-  }, [lat, lng]);
+  }, [activeRoom]);
 
   const isConnected = status === ConnectionStatus.CONNECTED;
   const isConnecting = status === ConnectionStatus.CONNECTING;
@@ -83,8 +56,17 @@ export const ConnectionPanel = ({
   );
 
   const handleClearToken = () => {
-    setToken('');
-    localStorage.removeItem(STORAGE_KEY_TOKEN);
+    if (onSignOut) {
+      onSignOut();
+    } else {
+      onTokenChange?.('');
+    }
+  };
+
+  const handleDirectConnect = (e) => {
+    e.preventDefault();
+    if (!isTokenValid || !roomId.trim() || !onConnect) return;
+    onConnect(roomId.trim(), token.trim());
   };
 
   const handleDetectGps = async () => {
@@ -92,8 +74,8 @@ export const ConnectionPanel = ({
     setGpsNotice(null);
     try {
       const pos = await getBrowserLocation();
-      setLat(String(pos.lat));
-      setLng(String(pos.lng));
+      onLatChange?.(String(pos.lat));
+      onLngChange?.(String(pos.lng));
       setGpsNotice({
         type: 'success',
         text: `GPS coordinates detected: ${pos.lat}, ${pos.lng} (accuracy: ±${pos.accuracy}m)`,
@@ -109,8 +91,8 @@ export const ConnectionPanel = ({
   };
 
   const handleApplyPreset = (preset) => {
-    setLat(String(preset.lat));
-    setLng(String(preset.lng));
+    onLatChange?.(String(preset.lat));
+    onLngChange?.(String(preset.lng));
     setGpsNotice({ type: 'info', text: `Location set to ${preset.name}` });
     if (isTokenValid && onDiscoverRooms) {
       onDiscoverRooms(preset.lat, preset.lng, token);
@@ -120,7 +102,12 @@ export const ConnectionPanel = ({
   const handleSearchGroups = (e) => {
     if (e) e.preventDefault();
     if (!isTokenValid || !onDiscoverRooms) return;
-    onDiscoverRooms(lat, lng, token);
+    onDiscoverRooms(lat, lng, token, { includeAll: false });
+  };
+
+  const handleListAllGroups = () => {
+    if (!isTokenValid || !onDiscoverRooms) return;
+    onDiscoverRooms(lat, lng, token, { includeAll: true });
   };
 
   return (
@@ -143,20 +130,30 @@ export const ConnectionPanel = ({
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
           <h2 id="connection-settings-heading" className="connection-panel__title">
-            GeoChat Location & Room Hub
+            GeoChat Location &amp; Room Hub
           </h2>
         </div>
         <span className="connection-panel__hint">30 km Geofence Discovery</span>
       </div>
 
-      {/* Step 1: JWT Authentication */}
-      <div className="connection-panel__section">
+      {/* Step 1: JWT Authentication & Direct Room Connect */}
+      <form className="connection-panel__section" onSubmit={handleDirectConnect}>
         <div className="form-group form-group--token">
           <div className="form-label-row">
             <label htmlFor="jwt-token-input" className="form-label">
               JWT Access Token
             </label>
             <div className="form-label-actions">
+              {onOpenAuth && (
+                <button
+                  type="button"
+                  className="text-btn"
+                  onClick={onOpenAuth}
+                  disabled={isConnecting}
+                >
+                  {isTokenValid ? 'Switch Account' : 'Sign In'}
+                </button>
+              )}
               {token && (
                 <button
                   type="button"
@@ -183,7 +180,7 @@ export const ConnectionPanel = ({
               type={showToken ? 'text' : 'password'}
               className="form-input form-input--token"
               value={token}
-              onChange={(e) => setToken(e.target.value)}
+              onChange={(e) => onTokenChange?.(e.target.value)}
               disabled={isConnecting}
               placeholder="Paste SimpleJWT access token (eyJhbGci...)"
               autoComplete="off"
@@ -199,7 +196,45 @@ export const ConnectionPanel = ({
             </p>
           )}
         </div>
-      </div>
+
+        {/* Direct Room ID + Connect/Disconnect */}
+        <div className="direct-connect-row">
+          <div className="form-group direct-connect-row__input">
+            <label htmlFor="room-id-input" className="form-label">
+              Room ID
+            </label>
+            <input
+              id="room-id-input"
+              type="text"
+              inputMode="numeric"
+              className="form-input form-input--compact"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              disabled={isConnecting}
+              placeholder="1"
+              required
+            />
+          </div>
+          <div className="direct-connect-row__actions">
+            <button
+              type="submit"
+              className="btn btn--connect"
+              disabled={!isTokenValid || !roomId.trim() || isConnecting}
+            >
+              {isConnecting ? 'Connecting...' : isConnected && String(activeRoom) === roomId.trim() ? 'Reconnect' : 'Connect'}
+            </button>
+            {isConnected && (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                onClick={onDisconnect}
+              >
+                Disconnect
+              </button>
+            )}
+          </div>
+        </div>
+      </form>
 
       {/* Step 2: Location Selection & GPS */}
       <div className="connection-panel__section geo-section">
@@ -276,7 +311,7 @@ export const ConnectionPanel = ({
               step="any"
               className="form-input form-input--compact"
               value={lat}
-              onChange={(e) => setLat(e.target.value)}
+              onChange={(e) => onLatChange?.(e.target.value)}
               placeholder="25.2893"
             />
           </div>
@@ -290,7 +325,7 @@ export const ConnectionPanel = ({
               step="any"
               className="form-input form-input--compact"
               value={lng}
-              onChange={(e) => setLng(e.target.value)}
+              onChange={(e) => onLngChange?.(e.target.value)}
               placeholder="83.0064"
             />
           </div>
@@ -302,60 +337,92 @@ export const ConnectionPanel = ({
           </p>
         )}
 
-        <button
-          type="button"
-          className="btn btn--search-rooms"
-          onClick={handleSearchGroups}
-          disabled={!isTokenValid || isLoadingNearbyRooms}
-        >
-          {isLoadingNearbyRooms ? (
-            <>
-              <span className="btn__spinner" />
-              Scanning for groups in 30 km...
-            </>
-          ) : (
-            <>
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              Find Groups Within 30 km
-            </>
-          )}
-        </button>
+        <div className="geo-search-actions">
+          <button
+            type="button"
+            className="btn btn--search-rooms"
+            onClick={handleSearchGroups}
+            disabled={!isTokenValid || isLoadingNearbyRooms}
+          >
+            {isLoadingNearbyRooms && roomListMode === 'nearby' ? (
+              <>
+                <span className="btn__spinner" />
+                Scanning 30 km...
+              </>
+            ) : (
+              <>
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                Find Nearby (30 km)
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            className="btn btn--list-all"
+            onClick={handleListAllGroups}
+            disabled={!isTokenValid || isLoadingNearbyRooms}
+            title="List all active rooms regardless of distance"
+          >
+            {isLoadingNearbyRooms && roomListMode === 'all' ? 'Loading...' : 'All Rooms'}
+          </button>
+        </div>
       </div>
 
-      {/* Step 3: Discovered Groups Within 30 km */}
+      {/* Inline Action Feedback (e.g. Geofence rejection, 404, unauthorized) */}
+      {roomActionError && (
+        <div className="panel-error-notice" role="alert">
+          <span className="panel-error-notice__text">{roomActionError}</span>
+          {onDismissRoomActionError && (
+            <button
+              type="button"
+              className="panel-error-notice__dismiss"
+              onClick={onDismissRoomActionError}
+              aria-label="Dismiss room error"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Step 3: Discovered Groups */}
       <div className="connection-panel__section rooms-section">
         <div className="rooms-section__header">
           <span className="geo-section__badge">2</span>
           <h3 className="geo-section__title">
-            Groups in Range ({nearbyRooms.length})
+            {roomListMode === 'all' ? `All Active Groups (${nearbyRooms.length})` : `Groups in Range (${nearbyRooms.length})`}
           </h3>
-          <span className="rooms-section__sub">Limit: 30 km radius</span>
+          <span className="rooms-section__sub">
+            {roomListMode === 'all' ? 'All active' : 'Limit: 30 km radius'}
+          </span>
         </div>
 
         {isLoadingNearbyRooms ? (
           <div className="rooms-loading">
             <span className="btn__spinner" />
-            <span>Finding groups within 30 km...</span>
+            <span>{roomListMode === 'all' ? 'Loading active rooms...' : 'Finding groups within 30 km...'}</span>
           </div>
         ) : nearbyRooms.length === 0 ? (
           <div className="rooms-empty">
             <p className="rooms-empty__text">
-              No chat groups found within 30 km of your selected coordinates.
+              {roomListMode === 'all'
+                ? 'No active chat groups found.'
+                : 'No chat groups found within 30 km of your selected coordinates.'}
             </p>
             <p className="rooms-empty__hint">
-              Tip: Click the <strong>Assi Ghat</strong> preset above to discover Varanasi groups.
+              Tip: Click <strong>Assi Ghat</strong> preset or <strong>All Rooms</strong> above to browse rooms.
             </p>
           </div>
         ) : (
@@ -374,7 +441,9 @@ export const ConnectionPanel = ({
                       #{room.id} {room.name}
                     </span>
                     <span className="room-card__distance">
-                      📍 {room.distance_km != null ? `${room.distance_km} km away` : 'In Range'}
+                      {room.distance_km != null
+                        ? `📍 ${room.distance_km} km away`
+                        : `${room.radius_km || 30} km radius`}
                     </span>
                   </div>
 
@@ -496,3 +565,4 @@ export const ConnectionPanel = ({
 };
 
 export default ConnectionPanel;
+

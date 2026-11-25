@@ -50,6 +50,36 @@ export const buildUserProfileApiUrl = () => {
 };
 
 /**
+ * Helper to construct the JWT login (token obtain pair) REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/token/
+ *
+ * @returns {string} Login token endpoint URL
+ */
+export const buildLoginApiUrl = () => {
+  return `${API_BASE_URL}/api/token/`;
+};
+
+/**
+ * Helper to construct the JWT refresh REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/token/refresh/
+ *
+ * @returns {string} Token refresh endpoint URL
+ */
+export const buildTokenRefreshApiUrl = () => {
+  return `${API_BASE_URL}/api/token/refresh/`;
+};
+
+/**
+ * Helper to construct the user registration REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/accounts/register/
+ *
+ * @returns {string} Registration endpoint URL
+ */
+export const buildRegisterApiUrl = () => {
+  return `${API_BASE_URL}/api/accounts/register/`;
+};
+
+/**
  * Helper to construct the room join REST API endpoint.
  * Format: http://127.0.0.1:8000/api/chats/rooms/<room_id>/join/
  *
@@ -74,6 +104,50 @@ export const buildRoomLeaveApiUrl = (roomId) => {
 };
 
 /**
+ * Helper to construct the chat rooms listing / discovery REST API endpoint.
+ * When lat and lng are provided, filters rooms within radius km.
+ *
+ * @param {object} [options]
+ * @param {number|string} [options.lat] - Latitude
+ * @param {number|string} [options.lng] - Longitude
+ * @param {number|string} [options.radius=30] - Radius in km
+ * @returns {string} Rooms list/discovery endpoint URL
+ */
+export const buildRoomsListApiUrl = ({ lat, lng, radius = 30 } = {}) => {
+  if (lat != null && lng != null && String(lat).trim() !== '' && String(lng).trim() !== '') {
+    const params = new URLSearchParams({
+      lat: String(lat).trim(),
+      lng: String(lng).trim(),
+      radius: String(radius ?? 30),
+    });
+    return `${API_BASE_URL}/api/chats/rooms/?${params.toString()}`;
+  }
+  return `${API_BASE_URL}/api/chats/rooms/`;
+};
+
+/**
+ * Helper to construct the room detail REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/<room_id>/
+ *
+ * @param {string|number} roomId - ID of the target chat room
+ * @param {object} [options]
+ * @param {number|string} [options.lat] - Optional latitude for distance calculation
+ * @param {number|string} [options.lng] - Optional longitude for distance calculation
+ * @returns {string} Room detail endpoint URL
+ */
+export const buildRoomDetailApiUrl = (roomId, { lat, lng } = {}) => {
+  const cleanRoomId = encodeURIComponent(String(roomId).trim());
+  if (lat != null && lng != null && String(lat).trim() !== '' && String(lng).trim() !== '') {
+    const params = new URLSearchParams({
+      lat: String(lat).trim(),
+      lng: String(lng).trim(),
+    });
+    return `${API_BASE_URL}/api/chats/rooms/${cleanRoomId}/?${params.toString()}`;
+  }
+  return `${API_BASE_URL}/api/chats/rooms/${cleanRoomId}/`;
+};
+
+/**
  * Helper to construct the nearby chat rooms discovery REST API endpoint.
  * Format: http://127.0.0.1:8000/api/chats/rooms/?lat=<lat>&lng=<lng>&radius=<radius>
  *
@@ -83,12 +157,17 @@ export const buildRoomLeaveApiUrl = (roomId) => {
  * @returns {string} Nearby rooms endpoint URL
  */
 export const buildNearbyRoomsApiUrl = (lat, lng, radius = 30) => {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lng: String(lng),
-    radius: String(radius),
-  });
-  return `${API_BASE_URL}/api/chats/rooms/?${params.toString()}`;
+  return buildRoomsListApiUrl({ lat, lng, radius });
+};
+
+/**
+ * Helper to construct the user's joined chat rooms REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/joined/
+ *
+ * @returns {string} Joined rooms endpoint URL
+ */
+export const buildJoinedRoomsApiUrl = () => {
+  return `${API_BASE_URL}/api/chats/rooms/joined/`;
 };
 
 

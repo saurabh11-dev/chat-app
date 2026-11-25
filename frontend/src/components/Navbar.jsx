@@ -1,16 +1,22 @@
 import React from 'react';
 import { ConnectionStatus } from '../services/socket';
+import { ROUTES } from '../utils/router';
 import './Navbar.css';
 
 /**
  * Navbar Component
- * Displays application branding and live WebSocket connection status badge.
- *
- * @param {object} props
- * @param {string} props.status - Current connection state (Disconnected, Connecting, Connected, Error)
- * @param {string|number} [props.activeRoom] - Active room ID when connected
+ * Displays GeoChat branding, route navigation (/ and /discover when authenticated),
+ * user handle, live connection status badge, and Sign Out button.
  */
-export const Navbar = ({ status, activeRoom }) => {
+export const Navbar = ({
+  status,
+  activeRoom,
+  currentRoute = ROUTES.HOME,
+  onNavigate,
+  isAuthenticated = false,
+  currentUser = null,
+  onSignOut,
+}) => {
   const getStatusClass = () => {
     switch (status) {
       case ConnectionStatus.CONNECTED:
@@ -44,24 +50,67 @@ export const Navbar = ({ status, activeRoom }) => {
         </div>
         <div className="navbar__brand-text">
           <h1 className="navbar__title">GeoChat</h1>
-          <span className="navbar__badge-tag">Day 1 • Real-time WS</span>
+          <span className="navbar__badge-tag">Location Chat</span>
         </div>
       </div>
 
-      <div className="navbar__status-area">
-        {status === ConnectionStatus.CONNECTED && activeRoom && (
-          <span className="navbar__room-pill">
-            <span className="navbar__room-hash">#</span> Room {activeRoom}
-          </span>
-        )}
+      {isAuthenticated && onNavigate && (
+        <nav className="navbar__nav" aria-label="Primary Navigation">
+          <button
+            type="button"
+            className={`navbar__nav-btn ${currentRoute === ROUTES.HOME ? 'navbar__nav-btn--active' : ''}`}
+            onClick={() => onNavigate(ROUTES.HOME)}
+          >
+            My Chats
+          </button>
+          <button
+            type="button"
+            className={`navbar__nav-btn ${currentRoute === ROUTES.DISCOVER ? 'navbar__nav-btn--active' : ''}`}
+            onClick={() => onNavigate(ROUTES.DISCOVER)}
+          >
+            Discover Rooms
+          </button>
+        </nav>
+      )}
 
-        <div className={`status-badge ${getStatusClass()}`} role="status" aria-live="polite">
-          <span className="status-badge__dot" />
-          <span className="status-badge__text">{status}</span>
+      {isAuthenticated ? (
+        <div className="navbar__status-area">
+          {currentUser?.handle && (
+            <span className="navbar__user-pill" title={currentUser.email || currentUser.handle}>
+              @{currentUser.handle}
+            </span>
+          )}
+
+          {status === ConnectionStatus.CONNECTED && activeRoom && (
+            <span className="navbar__room-pill">
+              <span className="navbar__room-hash">#</span> Room {activeRoom}
+            </span>
+          )}
+
+          <div className={`status-badge ${getStatusClass()}`} role="status" aria-live="polite">
+            <span className="status-badge__dot" />
+            <span className="status-badge__text">{status}</span>
+          </div>
+
+          {onSignOut && (
+            <button
+              type="button"
+              className="navbar__auth-action navbar__auth-action--signout"
+              onClick={onSignOut}
+            >
+              Sign Out
+            </button>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="navbar__status-area">
+          <span className="navbar__badge-tag">Sign In Required</span>
+        </div>
+      )}
     </header>
   );
 };
 
 export default Navbar;
+
+

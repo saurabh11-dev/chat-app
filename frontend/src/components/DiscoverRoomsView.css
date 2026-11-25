@@ -1,0 +1,462 @@
+.discover-view {
+  max-width: 1040px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.discover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.discover-header__title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.discover-header__subtitle {
+  font-size: 0.86rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
+.discover-back-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: var(--border-default);
+  color: var(--color-text-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.discover-back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(56, 189, 248, 0.4);
+}
+
+/* Location Card */
+.discover-location-card {
+  background-color: var(--color-bg-surface);
+  border: var(--border-default);
+  border-radius: var(--border-radius-lg);
+  padding: 1.35rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.discover-location-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.discover-location-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.discover-location-card__heading h3 {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.discover-step-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #090d16;
+  font-size: 0.75rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.discover-gps-btn {
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.discover-gps-btn:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.24);
+  color: #ffffff;
+}
+
+.discover-gps-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.discover-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.discover-presets__label {
+  font-size: 0.76rem;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.discover-presets__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.discover-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.discover-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary);
+}
+
+.discover-chip--active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.discover-coords-form {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.discover-coords-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 260px;
+}
+
+.discover-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.discover-field label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.discover-field input {
+  width: 100%;
+  background-color: var(--color-bg-input);
+  border: var(--border-default);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.58rem 0.8rem;
+  border-radius: var(--border-radius-md);
+}
+
+.discover-field input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
+}
+
+.discover-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.discover-btn {
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0.62rem 1.05rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.discover-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.discover-btn--primary {
+  background: var(--color-primary);
+  color: #090d16;
+}
+
+.discover-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  box-shadow: var(--shadow-glow);
+}
+
+.discover-btn--secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border: var(--border-default);
+  color: var(--color-text-secondary);
+}
+
+.discover-btn--secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary);
+}
+
+.discover-notice {
+  font-size: 0.78rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius-sm);
+}
+
+.discover-notice--success {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #86efac;
+}
+
+.discover-notice--info {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #7dd3fc;
+}
+
+.discover-notice--error {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger-text);
+}
+
+.discover-error-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--border-radius-md);
+  color: var(--color-danger-text);
+  font-size: 0.84rem;
+}
+
+.discover-error-alert__dismiss {
+  background: none;
+  border: none;
+  color: #fca5a5;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Results */
+.discover-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.discover-results__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.discover-results__hint {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.discover-empty-card {
+  background: var(--color-bg-surface);
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: var(--border-radius-lg);
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+}
+
+.discover-empty-card__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.discover-empty-card__sub {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  max-width: 440px;
+}
+
+.discover-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(56, 189, 248, 0.2);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.discover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1rem;
+}
+
+.discover-room-card {
+  background: var(--color-bg-surface);
+  border: var(--border-default);
+  border-radius: var(--border-radius-lg);
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  transition: all var(--transition-fast);
+}
+
+.discover-room-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.discover-room-card--joined {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.discover-room-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.discover-room-card__title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.discover-room-card__hash {
+  color: var(--color-primary);
+  margin-right: 0.2rem;
+}
+
+.discover-room-card__distance {
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  background: rgba(56, 189, 248, 0.12);
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--border-radius-sm);
+  white-space: nowrap;
+}
+
+.discover-room-card__desc {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+  flex: 1;
+}
+
+.discover-room-card__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  padding-top: 0.35rem;
+  border-top: var(--border-subtle);
+}
+
+.discover-room-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.discover-joined-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--border-radius-pill);
+}
+
+.discover-btn--join {
+  width: 100%;
+  background: var(--color-accent-gradient);
+  color: #090d16;
+}
+
+.discover-btn--join:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: var(--shadow-glow);
+}
+
+.discover-btn--open {
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--color-primary);
+}
+
+.discover-btn--open:hover {
+  background: rgba(56, 189, 248, 0.24);
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .discover-coords-inputs {
+    grid-template-columns: 1fr;
+  }
+}
