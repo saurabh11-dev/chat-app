@@ -481,6 +481,11 @@ export function App() {
             throw new Error(validation.error);
           }
 
+          const latStr = String(validation.lat);
+          const lngStr = String(validation.lng);
+          setLat(latStr);
+          setLng(lngStr);
+
           rooms = await fetchNearbyRooms({
             token: cleanToken,
             lat: validation.lat,
@@ -508,8 +513,10 @@ export function App() {
     async (roomId, latArg, lngArg) => {
       const targetRoomId = String(roomId || activeRoomRef.current || '').trim();
       const cleanToken = sanitizeToken(activeTokenRef.current);
-      const targetLat = latArg !== undefined ? latArg : latRef.current;
-      const targetLng = lngArg !== undefined ? lngArg : lngRef.current;
+      const targetLat =
+        latArg != null && String(latArg).trim() !== '' ? latArg : (latRef.current || lat);
+      const targetLng =
+        lngArg != null && String(lngArg).trim() !== '' ? lngArg : (lngRef.current || lng);
 
       if (!targetRoomId || !cleanToken) return;
 
@@ -524,6 +531,11 @@ export function App() {
           lat: targetLat,
           lng: targetLng,
         });
+
+        if (targetLat != null && targetLng != null && String(targetLat).trim() !== '' && String(targetLng).trim() !== '') {
+          setLat(String(targetLat));
+          setLng(String(targetLng));
+        }
 
         setDiscoverRooms((prev) =>
           prev.map((r) => (String(r.id) === targetRoomId ? { ...r, is_member: true } : r))
@@ -548,7 +560,7 @@ export function App() {
         setJoiningRoomId(null);
       }
     },
-    [handleConnect, loadJoinedRooms, navigate]
+    [handleConnect, loadJoinedRooms, navigate, lat, lng]
   );
 
   const handleOpenJoinedFromDiscover = useCallback(
@@ -577,6 +589,11 @@ export function App() {
           longitude,
           radius,
         });
+
+        if (latitude != null && longitude != null && String(latitude).trim() !== '' && String(longitude).trim() !== '') {
+          setLat(String(latitude));
+          setLng(String(longitude));
+        }
 
         const newRoomId = String(createdRoom.id);
         const refreshed = await loadJoinedRooms(cleanToken);
@@ -742,7 +759,7 @@ export function App() {
                 historyError={historyError}
                 onRetryLoadHistory={handleRetryLoadHistory}
                 currentUser={currentUser}
-                onJoinRoom={(id) => handleJoinRoom(id)}
+                onJoinRoom={(id) => handleJoinRoom(id, lat, lng)}
                 isJoiningRoom={isJoiningRoom}
                 onLeaveRoom={handleLeaveRoom}
                 isLeavingRoom={isLeavingRoom}

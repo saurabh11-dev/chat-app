@@ -606,6 +606,68 @@ class RoomMessageHistoryTests(APITestCase):
         self.assertTrue(res_join.data["is_active"])
         self.assertEqual(res_join.data["handle"], self.user2.handle)
 
+    def test_user_b_joins_room_at_same_gps_coordinates_without_distance_error(self):
+        """
+        Regression test:
+        User A creates a room at GPS coordinates (25.354483, 84.024375) with 30 km radius.
+        User B joins using the exact same coordinates.
+        Verify distance computes to ~0.00 km and join succeeds with 200 OK.
+        Verify joining from stale fallback coordinates (25.289300, 83.006400) fails with 102.58 km error.
+        """
+        user_a_lat = 25.354483
+        user_a_lng = 84.024375
+
+        # 1. User A creates room
+        self.client.force_authenticate(user=self.user1)
+        res_create = self.client.post(
+            "/api/chats/rooms/",
+            {
+                "name": "Buxar GPS Room",
+                "description": "Created at User A GPS location",
+                "latitude": user_a_lat,
+                "longitude": user_a_lng,
+                "radius": 30.00,
+            },
+        )
+        self.assertEqual(res_create.status_code, status.HTTP_201_CREATED)
+        room_id = res_create.data["id"]
+
+        # 2. User B joins using the EXACT SAME coordinates -> must succeed (distance = 0 km)
+        self.client.force_authenticate(user=self.user2)
+        join_url = f"/api/chats/rooms/{room_id}/join/"
+        res_join_same = self.client.post(
+            join_url,
+            {"lat": user_a_lat, "lng": user_a_lng},
+        )
+        self.assertEqual(res_join_same.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_join_same.data["is_active"])
+        self.assertTrue(
+            RoomMembership.objects.filter(
+                room_id=room_id, user=self.user2, is_active=True
+            ).exists()
+        )
+
+        # 3. User B leaves the room
+        self.client.post(f"/api/chats/rooms/{room_id}/leave/")
+        self.assertFalse(
+            RoomMembership.objects.filter(
+                room_id=room_id, user=self.user2, is_active=True
+            ).exists()
+        )
+
+        # 4. User B attempts to join with stale fallback coordinates (Assi Ghat: 25.289300, 83.006400)
+        # Distance between (25.354483, 84.024375) and (25.289300, 83.006400) is 102.58 km
+        stale_lat = 25.289300
+        stale_lng = 83.006400
+        res_join_stale = self.client.post(
+            join_url,
+            {"lat": stale_lat, "lng": stale_lng},
+        )
+        self.assertEqual(res_join_stale.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("102.57 km away", res_join_stale.data.get("error", ""))
+        self.assertIn("radius is 30.00 km", res_join_stale.data.get("error", ""))
+
+
 
 
 

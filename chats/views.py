@@ -203,7 +203,10 @@ class RoomJoinView(views.APIView):
                 serializer = RoomMembershipSerializer(existing)
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(
-                {"detail": "Your location ('lat' and 'lng') is required to join this room."},
+                {
+                    "detail": "Your location ('lat' and 'lng') is required to join this room.",
+                    "error": "Your location ('lat' and 'lng') is required to join this room.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -213,15 +216,20 @@ class RoomJoinView(views.APIView):
             r_lng = float(room.longitude)
         except (TypeError, ValueError):
             return Response(
-                {"detail": "This room does not have valid coordinates."},
+                {
+                    "detail": "This room does not have valid coordinates.",
+                    "error": "This room does not have valid coordinates.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        dist = haversine_km(user_lat, user_lng, r_lat, r_lng)
+        dist = haversine_km(r_lat, r_lng, user_lat, user_lng)
         if dist > float(room.radius_km):
+            msg = f"You are {dist:.2f} km away; room geofence radius is {room.radius_km} km."
             return Response(
                 {
-                    "detail": f"You are {dist:.2f} km away; room geofence radius is {room.radius_km} km.",
+                    "detail": msg,
+                    "error": msg,
                     "distance_km": dist,
                     "radius_km": float(room.radius_km),
                 },

@@ -29,13 +29,29 @@ export const DiscoverRoomsView = ({
   onBackToChats,
   onNavigateCreateRoom,
 }) => {
+  const [activeLat, setActiveLat] = useState(String(lat ?? '25.2893'));
+  const [activeLng, setActiveLng] = useState(String(lng ?? '83.0064'));
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [statusNotice, setStatusNotice] = useState(null);
 
+  useEffect(() => {
+    if (lat !== undefined && lat !== null && String(lat) !== activeLat) {
+      setActiveLat(String(lat));
+    }
+  }, [lat]);
+
+  useEffect(() => {
+    if (lng !== undefined && lng !== null && String(lng) !== activeLng) {
+      setActiveLng(String(lng));
+    }
+  }, [lng]);
+
   // Auto-fetch nearby rooms on mount if list is empty and coordinates exist
   useEffect(() => {
-    if (rooms.length === 0 && lat !== '' && lng !== '' && onDiscoverRooms) {
-      const validation = validateCoordinates(lat, lng);
+    const coordsLat = activeLat !== '' ? activeLat : lat;
+    const coordsLng = activeLng !== '' ? activeLng : lng;
+    if (rooms.length === 0 && coordsLat !== '' && coordsLng !== '' && onDiscoverRooms) {
+      const validation = validateCoordinates(coordsLat, coordsLng);
       if (validation.valid) {
         onDiscoverRooms(validation.lat, validation.lng, { includeAll: false }).catch((err) => {
           setStatusNotice({
@@ -59,6 +75,13 @@ export const DiscoverRoomsView = ({
       });
       return;
     }
+
+    const validLatStr = String(validation.lat);
+    const validLngStr = String(validation.lng);
+    setActiveLat(validLatStr);
+    setActiveLng(validLngStr);
+    onLatChange?.(validLatStr);
+    onLngChange?.(validLngStr);
 
     setStatusNotice(null);
     try {
@@ -95,8 +118,12 @@ export const DiscoverRoomsView = ({
     setStatusNotice(null);
     try {
       const pos = await getBrowserLocation();
-      onLatChange?.(String(pos.lat));
-      onLngChange?.(String(pos.lng));
+      const latStr = String(pos.lat);
+      const lngStr = String(pos.lng);
+      setActiveLat(latStr);
+      setActiveLng(lngStr);
+      onLatChange?.(latStr);
+      onLngChange?.(lngStr);
       setStatusNotice({
         type: 'info',
         text: `GPS detected: ${pos.lat}, ${pos.lng} (±${pos.accuracy}m). Searching nearby...`,
@@ -110,8 +137,12 @@ export const DiscoverRoomsView = ({
   };
 
   const handleApplyPreset = (preset) => {
-    onLatChange?.(String(preset.lat));
-    onLngChange?.(String(preset.lng));
+    const latStr = String(preset.lat);
+    const lngStr = String(preset.lng);
+    setActiveLat(latStr);
+    setActiveLng(lngStr);
+    onLatChange?.(latStr);
+    onLngChange?.(lngStr);
     setStatusNotice({ type: 'info', text: `Location set to ${preset.name}. Searching nearby...` });
     executeSearchNearby(preset.lat, preset.lng);
   };
@@ -120,14 +151,14 @@ export const DiscoverRoomsView = ({
     if (e?.preventDefault) {
       e.preventDefault();
     }
-    executeSearchNearby(lat, lng);
+    executeSearchNearby(activeLat, activeLng);
   };
 
   const handleBrowseAll = async () => {
     onDismissError?.();
     setStatusNotice(null);
     try {
-      const results = await onDiscoverRooms?.(lat, lng, { includeAll: true });
+      const results = await onDiscoverRooms?.(activeLat, activeLng, { includeAll: true });
       const count = Array.isArray(results) ? results.length : 0;
       const timeStr = new Date().toLocaleTimeString([], {
         hour: '2-digit',
@@ -398,7 +429,7 @@ export const DiscoverRoomsView = ({
                       <button
                         type="button"
                         className="discover-btn discover-btn--join"
-                        onClick={() => onJoinRoom?.(room.id, lat, lng)}
+                        onClick={() => onJoinRoom?.(room.id, activeLat, activeLng)}
                         disabled={isJoiningRoom}
                       >
                         {isThisJoining ? 'Joining...' : 'Join Room'}
