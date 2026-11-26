@@ -22,6 +22,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
   class Meta:
     model = User
-    fields = ['id', 'email', 'mobile_number', 'handle']
+    fields = ['id', 'email', 'mobile_number', 'handle', 'first_name', 'last_name']
 
     read_only_fields = ['id', 'email', 'mobile_number']

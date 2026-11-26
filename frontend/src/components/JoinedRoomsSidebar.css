@@ -10,6 +10,51 @@
   height: 560px;
 }
 
+.joined-sidebar__user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  background-color: var(--color-bg-surface-elevated);
+  border: var(--border-subtle);
+  border-radius: var(--border-radius-md);
+}
+
+.joined-sidebar__user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-accent-gradient);
+  color: #090d16;
+  font-size: 0.76rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.joined-sidebar__user-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.joined-sidebar__user-handle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.joined-sidebar__user-status {
+  font-size: 0.68rem;
+  color: var(--color-status-connected);
+  font-weight: 600;
+}
+
 .joined-sidebar__header {
   display: flex;
   align-items: center;

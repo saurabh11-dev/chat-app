@@ -18,6 +18,7 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         decimal_places=2,
         read_only=True,
     )
+    member_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ChatRoom
@@ -33,9 +34,16 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             'is_active',
             'distance_km',
             'is_member',
+            'member_count',
             'created_at',
         ]
-        read_only_fields = ['id', 'created_by_handle', 'is_active', 'created_at']
+        read_only_fields = [
+            'id',
+            'created_by_handle',
+            'is_active',
+            'member_count',
+            'created_at',
+        ]
 
     def to_internal_value(self, data):
         if isinstance(data, dict) and 'radius' in data and 'radius_km' not in data:
@@ -51,6 +59,9 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         return RoomMembership.objects.filter(
             room=obj, user=request.user, is_active=True
         ).exists()
+
+    def get_member_count(self, obj):
+        return RoomMembership.objects.filter(room=obj, is_active=True).count()
 
     def validate_name(self, value):
         cleaned = (value or "").strip()

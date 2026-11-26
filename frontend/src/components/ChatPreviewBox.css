@@ -24,6 +24,7 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
 .chat-box__pulse-indicator {
@@ -48,6 +49,29 @@
   padding: 0.15rem 0.5rem;
   border-radius: var(--border-radius-sm);
   border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.chat-box__members-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--border-radius-pill);
+}
+
+.chat-box__members-badge svg {
+  color: var(--color-primary);
+  opacity: 0.85;
+}
+
+.chat-box .status-badge {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
 }
 
 .chat-box__leave-btn {

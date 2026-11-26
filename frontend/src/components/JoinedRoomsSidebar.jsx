@@ -18,9 +18,22 @@ export const JoinedRoomsSidebar = ({
   onNavigateCreateRoom,
   onLeaveRoom,
   isLeavingRoom = false,
+  currentUser = null,
 }) => {
   return (
     <aside className="joined-sidebar" aria-label="Joined Groups">
+      {currentUser && (
+        <div className="joined-sidebar__user-badge">
+          <span className="joined-sidebar__user-avatar">
+            {(currentUser?.first_name || currentUser?.handle || 'U').charAt(0).toUpperCase()}
+          </span>
+          <div className="joined-sidebar__user-info">
+            <span className="joined-sidebar__user-handle">@{currentUser.handle || 'user'}</span>
+            <span className="joined-sidebar__user-status">Online</span>
+          </div>
+        </div>
+      )}
+
       <div className="joined-sidebar__header">
         <div className="joined-sidebar__title-row">
           <h2 className="joined-sidebar__title">Joined Groups</h2>

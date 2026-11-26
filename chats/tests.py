@@ -176,6 +176,7 @@ class RoomMessageHistoryTests(APITestCase):
         )
         self.assertEqual(res_detail.status_code, status.HTTP_200_OK)
         self.assertEqual(res_detail.data["name"], "Test Room")
+        self.assertEqual(res_detail.data["member_count"], 1)
         self.assertIsNotNone(res_detail.data["distance_km"])
 
         self.assertEqual(
@@ -392,6 +393,7 @@ class RoomMessageHistoryTests(APITestCase):
         self.assertEqual(res_created.data["radius_km"], "15.00")
         self.assertEqual(res_created.data["created_by_handle"], self.user2.handle)
         self.assertTrue(res_created.data["is_member"])
+        self.assertEqual(res_created.data["member_count"], 1)
         self.assertTrue(
             RoomMembership.objects.filter(
                 room_id=new_room_id, user=self.user2, is_active=True

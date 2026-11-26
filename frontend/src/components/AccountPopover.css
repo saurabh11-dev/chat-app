@@ -1,0 +1,208 @@
+.account-popover {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  width: 310px;
+  max-width: calc(100vw - 2rem);
+  background-color: var(--color-bg-surface-elevated);
+  border: var(--border-default);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popover-appear var(--transition-fast) ease-out;
+}
+
+@keyframes popover-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.account-popover__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-bottom: var(--border-subtle);
+  position: relative;
+}
+
+.account-popover__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--color-accent-gradient);
+  color: #090d16;
+  font-weight: 800;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 12px var(--color-primary-glow);
+}
+
+.account-popover__user-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.account-popover__handle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.account-popover__handle {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-popover__name {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+
+.account-popover__badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-status-connected);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--border-radius-pill);
+  flex-shrink: 0;
+}
+
+.account-popover__close-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem;
+  cursor: pointer;
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.account-popover__close-btn:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.account-popover__body {
+  padding: 0.85rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.account-popover__section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.15rem;
+}
+
+.account-popover__detail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.account-popover__detail-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.account-popover__detail-label svg {
+  color: var(--color-primary);
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.account-popover__detail-value {
+  color: var(--color-text-primary);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 155px;
+}
+
+.account-popover__detail-value--mono {
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  font-size: 0.8rem;
+}
+
+.account-popover__count-pill {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--border-radius-pill);
+}
+
+.account-popover__footer {
+  padding: 0.85rem 1.15rem;
+  border-top: var(--border-subtle);
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.account-popover__signout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  color: var(--color-danger-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.52rem 0.85rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-popover__signout-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ffffff;
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}

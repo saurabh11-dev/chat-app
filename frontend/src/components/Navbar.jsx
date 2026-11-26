@@ -1,34 +1,27 @@
-import React from 'react';
-import { ConnectionStatus } from '../services/socket';
+import React, { useState } from 'react';
 import { ROUTES } from '../utils/router';
+import AccountPopover from './AccountPopover';
 import './Navbar.css';
 
 /**
  * Navbar Component
- * Displays GeoChat branding, route navigation (/ and /discover when authenticated),
- * user handle, live connection status badge, and Sign Out button.
+ * Displays clean GeoChat branding, route navigation tabs,
+ * and a single clickable user account trigger that opens the Account Popover.
  */
 export const Navbar = ({
-  status,
-  activeRoom,
   currentRoute = ROUTES.HOME,
   onNavigate,
   isAuthenticated = false,
   currentUser = null,
+  joinedRoomsCount = 0,
   onSignOut,
 }) => {
-  const getStatusClass = () => {
-    switch (status) {
-      case ConnectionStatus.CONNECTED:
-        return 'status-badge--connected';
-      case ConnectionStatus.CONNECTING:
-        return 'status-badge--connecting';
-      case ConnectionStatus.ERROR:
-        return 'status-badge--error';
-      default:
-        return 'status-badge--disconnected';
-    }
-  };
+  const [isAccountOpen, setIsAccountOpen] = useState(false);
+
+  const avatarInitial = (currentUser?.first_name || currentUser?.handle || 'U')
+    .charAt(0)
+    .toUpperCase();
+  const handleText = currentUser?.handle ? `@${currentUser.handle}` : '@user';
 
   return (
     <header className="navbar">
@@ -82,32 +75,45 @@ export const Navbar = ({
 
       {isAuthenticated ? (
         <div className="navbar__status-area">
-          {currentUser?.handle && (
-            <span className="navbar__user-pill" title={currentUser.email || currentUser.handle}>
-              @{currentUser.handle}
-            </span>
-          )}
-
-          {status === ConnectionStatus.CONNECTED && activeRoom && (
-            <span className="navbar__room-pill">
-              <span className="navbar__room-hash">#</span> Room {activeRoom}
-            </span>
-          )}
-
-          <div className={`status-badge ${getStatusClass()}`} role="status" aria-live="polite">
-            <span className="status-badge__dot" />
-            <span className="status-badge__text">{status}</span>
-          </div>
-
-          {onSignOut && (
+          <div className="navbar__account-wrap">
             <button
               type="button"
-              className="navbar__auth-action navbar__auth-action--signout"
-              onClick={onSignOut}
+              className={`navbar__account-trigger ${isAccountOpen ? 'navbar__account-trigger--active' : ''}`}
+              onClick={() => setIsAccountOpen((prev) => !prev)}
+              aria-expanded={isAccountOpen}
+              aria-haspopup="dialog"
+              aria-label="User account menu"
             >
-              Sign Out
+              <span className="navbar__account-avatar">
+                {avatarInitial}
+              </span>
+              <span className="navbar__account-handle">
+                {handleText}
+              </span>
+              <svg
+                className={`navbar__account-chevron ${isAccountOpen ? 'navbar__account-chevron--open' : ''}`}
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
             </button>
-          )}
+
+            {isAccountOpen && (
+              <AccountPopover
+                currentUser={currentUser}
+                joinedRoomsCount={joinedRoomsCount}
+                onSignOut={onSignOut}
+                onClose={() => setIsAccountOpen(false)}
+              />
+            )}
+          </div>
         </div>
       ) : (
         <div className="navbar__status-area">
@@ -119,5 +125,3 @@ export const Navbar = ({
 };
 
 export default Navbar;
-
-

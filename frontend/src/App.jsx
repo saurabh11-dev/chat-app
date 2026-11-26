@@ -65,6 +65,7 @@ export function App() {
   const [connectionStatus, setConnectionStatus] = useState(ConnectionStatus.DISCONNECTED);
   const [activeRoom, setActiveRoom] = useState(null);
   const [activeRoomName, setActiveRoomName] = useState('');
+  const [activeRoomMemberCount, setActiveRoomMemberCount] = useState(null);
   const [lat, setLat] = useState(initialLat);
   const [lng, setLng] = useState(initialLng);
 
@@ -295,13 +296,16 @@ export function App() {
     setErrorBanner(null);
     setHistoryError(null);
 
+    const match =
+      joinedRooms.find((r) => String(r.id) === cleanRoomId) ||
+      discoverRooms.find((r) => String(r.id) === cleanRoomId);
     if (roomNameHint) {
       setActiveRoomName(roomNameHint);
     } else {
-      const match =
-        joinedRooms.find((r) => String(r.id) === cleanRoomId) ||
-        discoverRooms.find((r) => String(r.id) === cleanRoomId);
       setActiveRoomName(match ? match.name : '');
+    }
+    if (match?.member_count != null) {
+      setActiveRoomMemberCount(match.member_count);
     }
 
     if (isRoomChange) {
@@ -311,21 +315,20 @@ export function App() {
       setMessages([]);
     }
 
-    // Ensure room name is resolved even if navigated directly
-    if (!roomNameHint) {
-      fetchRoomDetail({
-        roomId: cleanRoomId,
-        token: cleanToken,
-        lat: latRef.current,
-        lng: lngRef.current,
+    // Ensure room name and member count are resolved even if navigated directly
+    fetchRoomDetail({
+      roomId: cleanRoomId,
+      token: cleanToken,
+      lat: latRef.current,
+      lng: lngRef.current,
+    })
+      .then((room) => {
+        if (String(activeRoomRef.current) === cleanRoomId) {
+          if (room?.name) setActiveRoomName(room.name);
+          if (room?.member_count != null) setActiveRoomMemberCount(room.member_count);
+        }
       })
-        .then((room) => {
-          if (String(activeRoomRef.current) === cleanRoomId && room?.name) {
-            setActiveRoomName(room.name);
-          }
-        })
-        .catch(() => {});
-    }
+      .catch(() => {});
 
     loadRoomHistory(cleanRoomId, cleanToken);
 
@@ -428,6 +431,7 @@ export function App() {
     setToken('');
     setActiveRoom(null);
     setActiveRoomName('');
+    setActiveRoomMemberCount(null);
     setCurrentUser(null);
     currentUserRef.current = null;
     setJoinedRooms([]);
@@ -598,6 +602,7 @@ export function App() {
         activeRoomRef.current = null;
         setActiveRoom(null);
         setActiveRoomName('');
+        setActiveRoomMemberCount(null);
         setMessages([]);
         setHistoryError(null);
       }
@@ -633,15 +638,17 @@ export function App() {
     }
   }, []);
 
+  const activeRoomObj = joinedRooms.find((r) => String(r.id) === String(activeRoom));
+  const currentMemberCount = activeRoomObj?.member_count ?? activeRoomMemberCount;
+
   return (
     <div className="app-container">
       <Navbar
-        status={connectionStatus}
-        activeRoom={connectionStatus === ConnectionStatus.CONNECTED ? activeRoom : null}
         currentRoute={route}
         onNavigate={navigate}
         isAuthenticated={isAuthenticated}
         currentUser={currentUser}
+        joinedRoomsCount={joinedRooms.length}
         onSignOut={handleSignOut}
       />
 
@@ -694,6 +701,7 @@ export function App() {
               onNavigateCreateRoom={() => navigate(ROUTES.NEW_ROOM)}
               onLeaveRoom={handleLeaveRoom}
               isLeavingRoom={isLeavingRoom}
+              currentUser={currentUser}
             />
 
             <section className="app-content">
@@ -703,6 +711,8 @@ export function App() {
                 onDismissError={() => setErrorBanner(null)}
                 onSendMessage={handleSendMessage}
                 isConnected={connectionStatus === ConnectionStatus.CONNECTED}
+                connectionStatus={connectionStatus}
+                memberCount={currentMemberCount}
                 activeRoom={activeRoom}
                 activeRoomName={activeRoomName}
                 isLoadingHistory={isLoadingHistory}
