@@ -1,5 +1,6 @@
 import math
 
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, views
 from rest_framework.exceptions import ValidationError
@@ -109,7 +110,13 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        with transaction.atomic():
+            room = serializer.save(created_by=self.request.user)
+            RoomMembership.objects.create(
+                room=room,
+                user=self.request.user,
+                is_active=True,
+            )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

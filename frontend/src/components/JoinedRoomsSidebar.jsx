@@ -15,6 +15,7 @@ export const JoinedRoomsSidebar = ({
   onSelectRoom,
   onRefresh,
   onNavigateDiscover,
+  onNavigateCreateRoom,
   onLeaveRoom,
   isLeavingRoom = false,
 }) => {
@@ -53,26 +54,50 @@ export const JoinedRoomsSidebar = ({
         )}
       </div>
 
-      <button
-        type="button"
-        className="joined-sidebar__discover-cta"
-        onClick={onNavigateDiscover}
-      >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      <div className="joined-sidebar__actions-row">
+        <button
+          type="button"
+          className="joined-sidebar__discover-cta"
+          onClick={onNavigateDiscover}
         >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        Join New Rooms
-      </button>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          Discover
+        </button>
+        {onNavigateCreateRoom && (
+          <button
+            type="button"
+            className="joined-sidebar__create-cta"
+            onClick={onNavigateCreateRoom}
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Create
+          </button>
+        )}
+      </div>
 
       {error && (
         <div className="joined-sidebar__error" role="alert">
@@ -112,13 +137,24 @@ export const JoinedRoomsSidebar = ({
             <p className="joined-sidebar__empty-sub">
               Detect your location and join nearby rooms to start chatting.
             </p>
-            <button
-              type="button"
-              className="joined-sidebar__empty-btn"
-              onClick={onNavigateDiscover}
-            >
-              Discover Rooms
-            </button>
+            <div className="joined-sidebar__empty-actions">
+              <button
+                type="button"
+                className="joined-sidebar__empty-btn"
+                onClick={onNavigateDiscover}
+              >
+                Discover Rooms
+              </button>
+              {onNavigateCreateRoom && (
+                <button
+                  type="button"
+                  className="joined-sidebar__empty-btn joined-sidebar__empty-btn--create"
+                  onClick={onNavigateCreateRoom}
+                >
+                  + Create Room
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <ul className="joined-sidebar__list">

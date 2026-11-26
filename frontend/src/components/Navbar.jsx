@@ -70,6 +70,13 @@ export const Navbar = ({
           >
             Discover Rooms
           </button>
+          <button
+            type="button"
+            className={`navbar__nav-btn ${currentRoute === ROUTES.NEW_ROOM ? 'navbar__nav-btn--active' : ''}`}
+            onClick={() => onNavigate(ROUTES.NEW_ROOM)}
+          >
+            + Create Room
+          </button>
         </nav>
       )}
 

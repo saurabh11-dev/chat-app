@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import AuthPanel from './components/AuthPanel';
 import JoinedRoomsSidebar from './components/JoinedRoomsSidebar';
 import DiscoverRoomsView from './components/DiscoverRoomsView';
+import CreateRoomView from './components/CreateRoomView';
 import ChatPreviewBox from './components/ChatPreviewBox';
 import { chatSocket, ConnectionStatus } from './services/socket';
 import {
@@ -14,6 +15,7 @@ import {
   fetchRoomDetail,
   joinRoom,
   leaveRoom,
+  createRoom,
 } from './services/chatApi';
 import {
   mergeMessages,
@@ -78,6 +80,8 @@ export function App() {
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [joiningRoomId, setJoiningRoomId] = useState(null);
   const [isLeavingRoom, setIsLeavingRoom] = useState(false);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [createRoomError, setCreateRoomError] = useState(null);
 
   const [messages, setMessages] = useState([]);
   const [errorBanner, setErrorBanner] = useState(null);
@@ -529,6 +533,49 @@ export function App() {
     [handleConnect, navigate]
   );
 
+  const handleCreateRoom = useCallback(
+    async ({ name, description, latitude, longitude, radius }) => {
+      const cleanToken = sanitizeToken(activeTokenRef.current);
+      if (!cleanToken) return;
+
+      setIsCreatingRoom(true);
+      setCreateRoomError(null);
+
+      try {
+        const createdRoom = await createRoom({
+          token: cleanToken,
+          name,
+          description,
+          latitude,
+          longitude,
+          radius,
+        });
+
+        const newRoomId = String(createdRoom.id);
+        const refreshed = await loadJoinedRooms(cleanToken);
+        const matched = refreshed.find((r) => String(r.id) === newRoomId);
+        const roomNameHint = matched?.name || createdRoom.name || '';
+
+        setJoinedRooms((prev) => {
+          if (!prev.some((r) => String(r.id) === newRoomId)) {
+            return [createdRoom, ...prev];
+          }
+          return prev;
+        });
+
+        // Redirect back to '/' with the newly created room selected so the user can chat immediately
+        navigate(ROUTES.HOME);
+        handleConnect(newRoomId, cleanToken, roomNameHint);
+      } catch (err) {
+        console.error('[GeoChat] Failed to create room:', err);
+        setCreateRoomError(err.message || 'Failed to create room.');
+      } finally {
+        setIsCreatingRoom(false);
+      }
+    },
+    [handleConnect, loadJoinedRooms, navigate]
+  );
+
   const handleLeaveRoom = useCallback(async (roomId) => {
     const targetRoomId = String(roomId || activeRoomRef.current || '').trim();
     const cleanToken = sanitizeToken(activeTokenRef.current);
@@ -601,6 +648,19 @@ export function App() {
       <main className="app-main">
         {!isAuthenticated || route === ROUTES.LOGIN ? (
           <AuthPanel onAuthSuccess={handleAuthSuccess} />
+        ) : route === ROUTES.NEW_ROOM ? (
+          <CreateRoomView
+            initialLat={lat}
+            initialLng={lng}
+            onLatChange={setLat}
+            onLngChange={setLng}
+            onCreateRoom={handleCreateRoom}
+            isCreating={isCreatingRoom}
+            actionError={createRoomError}
+            onDismissError={() => setCreateRoomError(null)}
+            onBackToChats={() => navigate(ROUTES.HOME)}
+            onNavigateDiscover={() => navigate(ROUTES.DISCOVER)}
+          />
         ) : route === ROUTES.DISCOVER ? (
           <DiscoverRoomsView
             lat={lat}
@@ -618,6 +678,7 @@ export function App() {
             onJoinRoom={handleJoinRoom}
             onOpenJoinedRoom={handleOpenJoinedFromDiscover}
             onBackToChats={() => navigate(ROUTES.HOME)}
+            onNavigateCreateRoom={() => navigate(ROUTES.NEW_ROOM)}
           />
         ) : (
           <div className="app-layout">
@@ -630,6 +691,7 @@ export function App() {
               onSelectRoom={handleSelectJoinedRoom}
               onRefresh={() => loadJoinedRooms(activeTokenRef.current)}
               onNavigateDiscover={() => navigate(ROUTES.DISCOVER)}
+              onNavigateCreateRoom={() => navigate(ROUTES.NEW_ROOM)}
               onLeaveRoom={handleLeaveRoom}
               isLeavingRoom={isLeavingRoom}
             />

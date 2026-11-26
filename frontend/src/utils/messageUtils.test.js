@@ -10,6 +10,7 @@ import {
   mergeMessages,
 } from './messageUtils.js';
 import { ROUTES, normalizeRoute, resolveAuthorizedRoute } from './router.js';
+import { buildCreateRoomApiUrl } from '../config/env.js';
 
 console.log('--- Testing messageUtils.js ---');
 
@@ -211,18 +212,27 @@ console.log('--- Testing messageUtils.js ---');
   assert.strictEqual(normalizeRoute('/'), ROUTES.HOME);
   assert.strictEqual(normalizeRoute('/login/'), ROUTES.LOGIN);
   assert.strictEqual(normalizeRoute('/discover/?foo=bar'), ROUTES.DISCOVER);
+  assert.strictEqual(normalizeRoute('/rooms/new/'), ROUTES.NEW_ROOM);
   assert.strictEqual(normalizeRoute('/unknown'), ROUTES.HOME);
 
   // Unauthenticated always resolves to /login
   assert.strictEqual(resolveAuthorizedRoute('/', false), ROUTES.LOGIN);
   assert.strictEqual(resolveAuthorizedRoute('/discover', false), ROUTES.LOGIN);
+  assert.strictEqual(resolveAuthorizedRoute('/rooms/new', false), ROUTES.LOGIN);
   assert.strictEqual(resolveAuthorizedRoute('/login', false), ROUTES.LOGIN);
 
-  // Authenticated redirects /login -> / and preserves / and /discover
+  // Authenticated redirects /login -> / and preserves /, /discover, and /rooms/new
   assert.strictEqual(resolveAuthorizedRoute('/login', true), ROUTES.HOME);
   assert.strictEqual(resolveAuthorizedRoute('/', true), ROUTES.HOME);
   assert.strictEqual(resolveAuthorizedRoute('/discover', true), ROUTES.DISCOVER);
+  assert.strictEqual(resolveAuthorizedRoute('/rooms/new', true), ROUTES.NEW_ROOM);
   console.log('✓ Route normalization & auth guard tests passed');
+}
+
+// 6. env.js endpoint helpers
+{
+  assert.strictEqual(buildCreateRoomApiUrl().endsWith('/api/chats/rooms/'), true);
+  console.log('✓ buildCreateRoomApiUrl tests passed');
 }
 
 console.log('All messageUtils & router tests passed successfully!');

@@ -7,13 +7,14 @@ export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   DISCOVER: '/discover',
+  NEW_ROOM: '/rooms/new',
 };
 
 /**
  * Normalizes a browser pathname into a known GeoChat route.
  *
  * @param {string} pathname
- * @returns {'/' | '/login' | '/discover'}
+ * @returns {'/' | '/login' | '/discover' | '/rooms/new'}
  */
 export function normalizeRoute(pathname) {
   if (!pathname || typeof pathname !== 'string') {
@@ -22,6 +23,7 @@ export function normalizeRoute(pathname) {
   const clean = pathname.split('?')[0].split('#')[0].replace(/\/+$/, '') || '/';
   if (clean === ROUTES.LOGIN) return ROUTES.LOGIN;
   if (clean === ROUTES.DISCOVER) return ROUTES.DISCOVER;
+  if (clean === ROUTES.NEW_ROOM) return ROUTES.NEW_ROOM;
   return ROUTES.HOME;
 }
 

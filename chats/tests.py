@@ -322,4 +322,123 @@ class RoomMessageHistoryTests(APITestCase):
         self.assertEqual(res_two.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res_two.data), 2)
 
+    def test_create_room_auto_membership_and_validation(self):
+        create_url = "/api/chats/rooms/"
+
+        # Unauthenticated creation returns 401
+        res_anon = self.client.post(
+            create_url,
+            {"name": "Anon Room", "latitude": "25.289300", "longitude": "83.006400"},
+        )
+        self.assertEqual(res_anon.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.force_authenticate(user=self.user2)
+
+        # Validation errors (400): blank name, out-of-range coordinates, invalid radius
+        self.assertEqual(
+            self.client.post(
+                create_url,
+                {"name": "   ", "latitude": "25.289300", "longitude": "83.006400", "radius_km": "10.00"},
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.post(
+                create_url,
+                {"name": "Bad Lat", "latitude": "95.000000", "longitude": "83.006400", "radius_km": "10.00"},
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.post(
+                create_url,
+                {"name": "Bad Lng", "latitude": "25.289300", "longitude": "-185.000000", "radius_km": "10.00"},
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.post(
+                create_url,
+                {"name": "Zero Radius", "latitude": "25.289300", "longitude": "83.006400", "radius_km": "0"},
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.post(
+                create_url,
+                {"name": "Huge Radius", "latitude": "25.289300", "longitude": "83.006400", "radius_km": "600"},
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        # Successful creation using radius alias creates active membership for creator
+        res_created = self.client.post(
+            create_url,
+            {
+                "name": "Ghat Sunset Circle",
+                "description": "Evening meetups",
+                "latitude": "25.289300",
+                "longitude": "83.006400",
+                "radius": "15.00",
+            },
+        )
+        self.assertEqual(res_created.status_code, status.HTTP_201_CREATED)
+        new_room_id = res_created.data["id"]
+        self.assertEqual(res_created.data["name"], "Ghat Sunset Circle")
+        self.assertEqual(res_created.data["description"], "Evening meetups")
+        self.assertEqual(res_created.data["latitude"], "25.289300")
+        self.assertEqual(res_created.data["longitude"], "83.006400")
+        self.assertEqual(res_created.data["radius"], "15.00")
+        self.assertEqual(res_created.data["radius_km"], "15.00")
+        self.assertEqual(res_created.data["created_by_handle"], self.user2.handle)
+        self.assertTrue(res_created.data["is_member"])
+        self.assertTrue(
+            RoomMembership.objects.filter(
+                room_id=new_room_id, user=self.user2, is_active=True
+            ).exists()
+        )
+
+        # Creator sees new room in /joined/ and can immediately read/post messages
+        res_joined = self.client.get("/api/chats/rooms/joined/")
+        self.assertEqual(res_joined.status_code, status.HTTP_200_OK)
+        self.assertIn(new_room_id, [r["id"] for r in res_joined.data])
+
+        msg_url = f"/api/chats/rooms/{new_room_id}/messages/"
+        self.assertEqual(self.client.get(msg_url).status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            self.client.post(msg_url, {"content": "Welcome!"}).status_code,
+            status.HTTP_201_CREATED,
+        )
+
+    def test_leave_room_edge_cases(self):
+        # Unauthenticated returns 401
+        self.assertEqual(
+            self.client.post(f"/api/chats/rooms/{self.room.id}/leave/").status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+        # Non-existent room returns 404
+        self.client.force_authenticate(user=self.user2)
+        self.assertEqual(
+            self.client.post("/api/chats/rooms/99999/leave/").status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        # Leaving a room when not an active member returns 400
+        self.assertEqual(
+            self.client.post(f"/api/chats/rooms/{self.room.id}/leave/").status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        # Active member can leave -> 200, removed from /joined/, messages return 403
+        self.client.force_authenticate(user=self.user1)
+        res_leave = self.client.post(f"/api/chats/rooms/{self.room.id}/leave/")
+        self.assertEqual(res_leave.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get("/api/chats/rooms/joined/").data, [])
+        self.assertEqual(
+            self.client.get(f"/api/chats/rooms/{self.room.id}/messages/").status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
 

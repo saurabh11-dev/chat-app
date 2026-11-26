@@ -9,6 +9,7 @@ import {
   buildLoginApiUrl,
   buildRegisterApiUrl,
   buildJoinedRoomsApiUrl,
+  buildCreateRoomApiUrl,
 } from '../config/env';
 import { isValidJwt, extractAccessToken, sanitizeToken } from '../utils/messageUtils';
 
@@ -242,6 +243,73 @@ export async function fetchJoinedRooms({ token, signal } = {}) {
 
   const payload = await response.json();
   return Array.isArray(payload) ? payload : (payload.results || []);
+}
+
+/**
+ * Creates a new geofenced chat room (`POST /api/chats/rooms/`).
+ * The authenticated creator is automatically enrolled as an active member on the backend.
+ *
+ * @param {object} options
+ * @param {string} options.token - JWT Access Token
+ * @param {string} options.name - Room name (non-empty)
+ * @param {string} [options.description=''] - Optional room description
+ * @param {number|string} options.latitude - Center latitude (-90..90)
+ * @param {number|string} options.longitude - Center longitude (-180..180)
+ * @param {number|string} [options.radius=30] - Geofence radius in km (> 0 and <= 500)
+ * @param {AbortSignal} [options.signal]
+ * @returns {Promise<object>} Serialized newly created room object (201)
+ */
+export async function createRoom({
+  token,
+  name,
+  description = '',
+  latitude,
+  longitude,
+  radius = 30,
+  signal,
+}) {
+  const cleanToken = requireValidToken(token, 'create a room');
+  const cleanName = typeof name === 'string' ? name.trim() : '';
+  if (!cleanName) {
+    throw new Error('Room name is required.');
+  }
+
+  const coords = normalizeOptionalCoords(latitude, longitude);
+  if (!coords) {
+    throw new Error('Latitude and longitude coordinates are required.');
+  }
+  if (coords.lat < -90 || coords.lat > 90 || coords.lng < -180 || coords.lng > 180) {
+    throw new Error('Coordinates must be within valid ranges (lat: -90..90, lng: -180..180).');
+  }
+
+  const radiusNum = Number(radius ?? 30);
+  if (!Number.isFinite(radiusNum) || radiusNum <= 0 || radiusNum > 500) {
+    throw new Error('Geofence radius must be greater than 0 and at most 500 km.');
+  }
+
+  const url = buildCreateRoomApiUrl();
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      name: cleanName,
+      description: typeof description === 'string' ? description.trim() : '',
+      latitude: Number(coords.lat.toFixed(6)),
+      longitude: Number(coords.lng.toFixed(6)),
+      radius_km: Number(radiusNum.toFixed(2)),
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response, 'Failed to create room');
+  }
+
+  return await response.json();
 }
 
 /**

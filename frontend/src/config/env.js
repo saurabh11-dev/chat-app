@@ -4,11 +4,13 @@
  */
 
 export const API_BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_API_BASE_URL) ||
+  'http://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 
 export const WS_BASE_URL = (
-  import.meta.env.VITE_WS_BASE_URL || 'ws://127.0.0.1:8000'
+  (typeof import.meta !== 'undefined' && import.meta?.env?.VITE_WS_BASE_URL) ||
+  'ws://127.0.0.1:8000'
 ).replace(/\/+$/, '');
 
 /**
@@ -169,5 +171,16 @@ export const buildNearbyRoomsApiUrl = (lat, lng, radius = 30) => {
 export const buildJoinedRoomsApiUrl = () => {
   return `${API_BASE_URL}/api/chats/rooms/joined/`;
 };
+
+/**
+ * Helper to construct the room creation REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/chats/rooms/
+ *
+ * @returns {string} Room creation endpoint URL
+ */
+export const buildCreateRoomApiUrl = () => {
+  return `${API_BASE_URL}/api/chats/rooms/`;
+};
+
 
 

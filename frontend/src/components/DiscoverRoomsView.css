@@ -27,6 +27,31 @@
   margin-top: 0.25rem;
 }
 
+.discover-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.discover-create-btn {
+  background: var(--color-accent-gradient);
+  border: none;
+  color: #090d16;
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0.55rem 1rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.discover-create-btn:hover {
+  filter: brightness(1.08);
+  box-shadow: var(--shadow-glow);
+}
+
 .discover-back-btn {
   background: rgba(255, 255, 255, 0.06);
   border: var(--border-default);
@@ -332,6 +357,24 @@
   font-size: 0.82rem;
   color: var(--color-text-muted);
   max-width: 440px;
+}
+
+.discover-empty-card__create-btn {
+  margin-top: 0.5rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--color-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.discover-empty-card__create-btn:hover {
+  background: rgba(56, 189, 248, 0.22);
+  color: #ffffff;
 }
 
 .discover-spinner {

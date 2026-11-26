@@ -23,6 +23,7 @@ export const DiscoverRoomsView = ({
   onJoinRoom,
   onOpenJoinedRoom,
   onBackToChats,
+  onNavigateCreateRoom,
 }) => {
   const [isDetectingGps, setIsDetectingGps] = useState(false);
   const [gpsNotice, setGpsNotice] = useState(null);
@@ -81,13 +82,24 @@ export const DiscoverRoomsView = ({
             Share your coordinates to find rooms within a 30 km geofence and join to start chatting.
           </p>
         </div>
-        <button
-          type="button"
-          className="discover-back-btn"
-          onClick={onBackToChats}
-        >
-          ← Back to My Chats
-        </button>
+        <div className="discover-header__actions">
+          {onNavigateCreateRoom && (
+            <button
+              type="button"
+              className="discover-create-btn"
+              onClick={onNavigateCreateRoom}
+            >
+              + Create Room
+            </button>
+          )}
+          <button
+            type="button"
+            className="discover-back-btn"
+            onClick={onBackToChats}
+          >
+            ← Back to My Chats
+          </button>
+        </div>
       </div>
 
       {/* Location Input Card */}
@@ -237,6 +249,15 @@ export const DiscoverRoomsView = ({
               Try detecting your GPS, selecting a preset location, or clicking{' '}
               <strong>Browse All Active</strong> to view all rooms.
             </p>
+            {onNavigateCreateRoom && (
+              <button
+                type="button"
+                className="discover-empty-card__create-btn"
+                onClick={onNavigateCreateRoom}
+              >
+                + Create Geofenced Room Here
+              </button>
+            )}
           </div>
         ) : (
           <div className="discover-grid">
