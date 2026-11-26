@@ -17,22 +17,28 @@ from .utils import haversine_km
 
 
 def _extract_raw_coordinates(primary, fallback=None):
-    """Extract raw lat/lng values supporting both short ('lat'/'lng') and full ('latitude'/'longitude') keys."""
-    def _pick(short_key, long_key):
+    """Extract raw lat/lng values supporting 'lat'/'latitude' and 'lng'/'lon'/'longitude' keys."""
+    def _pick(*keys):
         for source in (primary, fallback):
             if source is None:
                 continue
-            if short_key in source:
-                return source.get(short_key)
-            if long_key in source:
-                return source.get(long_key)
+            for k in keys:
+                if k in source:
+                    val = source.get(k)
+                    if val is not None and str(val).strip() != '':
+                        return val
         return None
 
-    return _pick('lat', 'latitude'), _pick('lng', 'longitude')
+    return _pick('lat', 'latitude'), _pick('lng', 'lon', 'longitude')
 
 
 def _parse_coordinates(lat_raw, lng_raw):
     """Validate and parse coordinate strings/numbers into finite (lat, lng) floats."""
+    if lat_raw is not None and str(lat_raw).strip() == '':
+        lat_raw = None
+    if lng_raw is not None and str(lng_raw).strip() == '':
+        lng_raw = None
+
     if (lat_raw is None) != (lng_raw is None):
         raise ValidationError(
             {"detail": "Both 'lat' ('latitude') and 'lng' ('longitude') are required together."}
@@ -81,7 +87,11 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
 
             if coords is not None:
                 user_lat, user_lng = coords
-                radius_param = self.request.query_params.get('radius', '30')
+                radius_param = (
+                    self.request.query_params.get('radius')
+                    or self.request.query_params.get('radius_km')
+                    or '30'
+                )
                 try:
                     search_radius = float(radius_param)
                 except (TypeError, ValueError):
@@ -96,11 +106,19 @@ class ChatRoomListCreateView(generics.ListCreateAPIView):
 
                 nearby_rooms = []
                 for room in queryset:
-                    dist = haversine_km(
-                        user_lat, user_lng, room.latitude, room.longitude
-                    )
-                    effective_limit = float(room.radius_km)
-                    if dist <= effective_limit and dist <= search_radius:
+                    if room.latitude is None or room.longitude is None:
+                        continue
+                    try:
+                        r_lat = float(room.latitude)
+                        r_lng = float(room.longitude)
+                    except (TypeError, ValueError):
+                        continue
+
+                    if not math.isfinite(r_lat) or not math.isfinite(r_lng):
+                        continue
+
+                    dist = haversine_km(user_lat, user_lng, r_lat, r_lng)
+                    if dist <= search_radius:
                         room.distance_km = dist
                         nearby_rooms.append(room)
 
@@ -157,10 +175,13 @@ class ChatRoomDetailView(generics.RetrieveAPIView):
         )
         lat_raw, lng_raw = _extract_raw_coordinates(self.request.query_params)
         coords = _parse_coordinates(lat_raw, lng_raw)
-        if coords is not None:
-            room.distance_km = haversine_km(
-                coords[0], coords[1], room.latitude, room.longitude
-            )
+        if coords is not None and room.latitude is not None and room.longitude is not None:
+            try:
+                room.distance_km = haversine_km(
+                    coords[0], coords[1], float(room.latitude), float(room.longitude)
+                )
+            except (TypeError, ValueError):
+                pass
         return room
 
 
@@ -187,7 +208,16 @@ class RoomJoinView(views.APIView):
             )
 
         user_lat, user_lng = coords
-        dist = haversine_km(user_lat, user_lng, room.latitude, room.longitude)
+        try:
+            r_lat = float(room.latitude)
+            r_lng = float(room.longitude)
+        except (TypeError, ValueError):
+            return Response(
+                {"detail": "This room does not have valid coordinates."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        dist = haversine_km(user_lat, user_lng, r_lat, r_lng)
         if dist > float(room.radius_km):
             return Response(
                 {

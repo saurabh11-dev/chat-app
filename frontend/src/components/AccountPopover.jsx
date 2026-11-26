@@ -11,12 +11,14 @@ import './AccountPopover.css';
  * @param {number} props.joinedRoomsCount - Total number of rooms user has joined
  * @param {() => void} props.onSignOut - Sign out handler
  * @param {() => void} props.onClose - Popover dismiss handler
+ * @param {() => void} [props.onNavigateHome] - Navigate to home chats handler
  */
 export const AccountPopover = ({
   currentUser,
   joinedRoomsCount = 0,
   onSignOut,
   onClose,
+  onNavigateHome,
 }) => {
   const popoverRef = useRef(null);
 
@@ -215,6 +217,30 @@ export const AccountPopover = ({
       </div>
 
       <div className="account-popover__footer">
+        {onNavigateHome && (
+          <button
+            type="button"
+            className="account-popover__nav-btn"
+            onClick={() => {
+              onClose?.();
+              onNavigateHome();
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            Go to My Chats
+          </button>
+        )}
         <button
           type="button"
           className="account-popover__signout-btn"

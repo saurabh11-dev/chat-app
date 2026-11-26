@@ -12,6 +12,7 @@ import {
   buildCreateRoomApiUrl,
 } from '../config/env';
 import { isValidJwt, extractAccessToken, sanitizeToken } from '../utils/messageUtils';
+import { normalizeRoomsResponse } from '../utils/geolocation';
 
 /**
  * Chat API Service
@@ -191,11 +192,23 @@ export async function fetchUserProfile(token, signal) {
  * @param {AbortSignal} [options.signal]
  * @returns {Promise<Array<object>>}
  */
-export async function fetchRooms({ token, lat, lng, radius = 30, signal } = {}) {
+export async function fetchRooms({
+  token,
+  lat,
+  lng,
+  latitude,
+  longitude,
+  radius = 30,
+  radius_km,
+  signal,
+} = {}) {
   const cleanToken = requireValidToken(token, 'list chat rooms');
-  const coords = normalizeOptionalCoords(lat, lng);
+  const rawLat = lat !== undefined ? lat : latitude;
+  const rawLng = lng !== undefined ? lng : longitude;
+  const rawRadius = radius_km !== undefined ? radius_km : radius;
+  const coords = normalizeOptionalCoords(rawLat, rawLng);
   const url = coords
-    ? buildRoomsListApiUrl({ lat: coords.lat, lng: coords.lng, radius })
+    ? buildRoomsListApiUrl({ lat: coords.lat, lng: coords.lng, radius: rawRadius })
     : buildRoomsListApiUrl();
 
   const response = await fetch(url, {
@@ -212,7 +225,7 @@ export async function fetchRooms({ token, lat, lng, radius = 30, signal } = {}) 
   }
 
   const payload = await response.json();
-  return Array.isArray(payload) ? payload : (payload.results || []);
+  return normalizeRoomsResponse(payload);
 }
 
 /**
@@ -242,7 +255,7 @@ export async function fetchJoinedRooms({ token, signal } = {}) {
   }
 
   const payload = await response.json();
-  return Array.isArray(payload) ? payload : (payload.results || []);
+  return normalizeRoomsResponse(payload);
 }
 
 /**
@@ -265,7 +278,10 @@ export async function createRoom({
   description = '',
   latitude,
   longitude,
+  lat,
+  lng,
   radius = 30,
+  radius_km,
   signal,
 }) {
   const cleanToken = requireValidToken(token, 'create a room');
@@ -274,7 +290,11 @@ export async function createRoom({
     throw new Error('Room name is required.');
   }
 
-  const coords = normalizeOptionalCoords(latitude, longitude);
+  const rawLat = latitude !== undefined ? latitude : lat;
+  const rawLng = longitude !== undefined ? longitude : lng;
+  const rawRadius = radius_km !== undefined ? radius_km : radius;
+
+  const coords = normalizeOptionalCoords(rawLat, rawLng);
   if (!coords) {
     throw new Error('Latitude and longitude coordinates are required.');
   }
@@ -282,7 +302,7 @@ export async function createRoom({
     throw new Error('Coordinates must be within valid ranges (lat: -90..90, lng: -180..180).');
   }
 
-  const radiusNum = Number(radius ?? 30);
+  const radiusNum = Number(rawRadius ?? 30);
   if (!Number.isFinite(radiusNum) || radiusNum <= 0 || radiusNum > 500) {
     throw new Error('Geofence radius must be greater than 0 and at most 500 km.');
   }
@@ -300,7 +320,10 @@ export async function createRoom({
       description: typeof description === 'string' ? description.trim() : '',
       latitude: Number(coords.lat.toFixed(6)),
       longitude: Number(coords.lng.toFixed(6)),
+      lat: Number(coords.lat.toFixed(6)),
+      lng: Number(coords.lng.toFixed(6)),
       radius_km: Number(radiusNum.toFixed(2)),
+      radius: Number(radiusNum.toFixed(2)),
     }),
     signal,
   });
@@ -358,15 +381,24 @@ export async function fetchRoomDetail({ roomId, token, lat, lng, signal }) {
  * @param {number|string} [options.lng] - Optional user longitude
  * @returns {Promise<object>} Response data from server (membership details)
  */
-export async function joinRoom({ roomId, token, lat, lng }) {
+export async function joinRoom({ roomId, token, lat, lng, latitude, longitude }) {
   if (!roomId) {
     throw new Error('Room ID is required to join room.');
   }
   const cleanToken = requireValidToken(token, 'join room');
-  const coords = normalizeOptionalCoords(lat, lng);
+  const rawLat = lat !== undefined ? lat : latitude;
+  const rawLng = lng !== undefined ? lng : longitude;
+  const coords = normalizeOptionalCoords(rawLat, rawLng);
 
   const url = buildRoomJoinApiUrl(roomId);
-  const body = coords ? { lat: coords.lat, lng: coords.lng } : {};
+  const body = coords
+    ? {
+        lat: coords.lat,
+        lng: coords.lng,
+        latitude: coords.lat,
+        longitude: coords.lng,
+      }
+    : {};
 
   const response = await fetch(url, {
     method: 'POST',
@@ -390,20 +422,35 @@ export async function joinRoom({ roomId, token, lat, lng }) {
  *
  * @param {object} options
  * @param {string} options.token - JWT Access Token
- * @param {number|string} options.lat - User latitude
- * @param {number|string} options.lng - User longitude
+ * @param {number|string} [options.lat] - User latitude
+ * @param {number|string} [options.lng] - User longitude
+ * @param {number|string} [options.latitude] - User latitude alias
+ * @param {number|string} [options.longitude] - User longitude alias
  * @param {number|string} [options.radius=30] - Radius in km
+ * @param {number|string} [options.radius_km] - Radius in km alias
  * @param {AbortSignal} [options.signal]
  * @returns {Promise<Array<object>>} List of nearby rooms with distance_km and is_member
  */
-export async function fetchNearbyRooms({ token, lat, lng, radius = 30, signal }) {
+export async function fetchNearbyRooms({
+  token,
+  lat,
+  lng,
+  latitude,
+  longitude,
+  radius = 30,
+  radius_km,
+  signal,
+}) {
   const cleanToken = requireValidToken(token, 'discover nearby rooms');
-  const coords = normalizeOptionalCoords(lat, lng);
+  const rawLat = lat !== undefined ? lat : latitude;
+  const rawLng = lng !== undefined ? lng : longitude;
+  const rawRadius = radius_km !== undefined ? radius_km : radius;
+  const coords = normalizeOptionalCoords(rawLat, rawLng);
   if (!coords) {
     throw new Error('Latitude and Longitude are required to find nearby rooms.');
   }
 
-  const url = buildNearbyRoomsApiUrl(coords.lat, coords.lng, radius);
+  const url = buildNearbyRoomsApiUrl(coords.lat, coords.lng, rawRadius);
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -418,7 +465,7 @@ export async function fetchNearbyRooms({ token, lat, lng, radius = 30, signal })
   }
 
   const payload = await response.json();
-  return Array.isArray(payload) ? payload : (payload.results || []);
+  return normalizeRoomsResponse(payload);
 }
 
 /**

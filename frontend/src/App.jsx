@@ -25,6 +25,7 @@ import {
   sanitizeToken,
 } from './utils/messageUtils';
 import { ROUTES, resolveAuthorizedRoute } from './utils/router';
+import { validateCoordinates, normalizeRoomsResponse } from './utils/geolocation';
 import './App.css';
 
 const STORAGE_KEY_TOKEN = 'geochat_jwt_token';
@@ -452,34 +453,56 @@ export function App() {
     setRoute(ROUTES.LOGIN);
   }, []);
 
-  const handleDiscoverRooms = useCallback(async (latArg, lngArg, { includeAll = false } = {}) => {
-    const cleanToken = sanitizeToken(activeTokenRef.current);
-    if (!cleanToken) return;
+  const handleDiscoverRooms = useCallback(
+    async (latArg, lngArg, { includeAll = false } = {}) => {
+      const cleanToken = sanitizeToken(activeTokenRef.current || token);
+      if (!cleanToken) {
+        const authErr = 'You must be signed in to discover rooms.';
+        setDiscoverError(authErr);
+        throw new Error(authErr);
+      }
 
-    const targetLat = latArg ?? latRef.current;
-    const targetLng = lngArg ?? lngRef.current;
+      setIsLoadingDiscover(true);
+      setDiscoverError(null);
+      setRoomListMode(includeAll ? 'all' : 'nearby');
 
-    setIsLoadingDiscover(true);
-    setDiscoverError(null);
-    setRoomListMode(includeAll ? 'all' : 'nearby');
+      try {
+        let rooms;
+        if (includeAll) {
+          rooms = await fetchRooms({ token: cleanToken });
+        } else {
+          const rawLat =
+            latArg != null && String(latArg).trim() !== '' ? latArg : (latRef.current || lat);
+          const rawLng =
+            lngArg != null && String(lngArg).trim() !== '' ? lngArg : (lngRef.current || lng);
 
-    try {
-      const rooms = includeAll
-        ? await fetchRooms({ token: cleanToken })
-        : await fetchNearbyRooms({
+          const validation = validateCoordinates(rawLat, rawLng);
+          if (!validation.valid) {
+            throw new Error(validation.error);
+          }
+
+          rooms = await fetchNearbyRooms({
             token: cleanToken,
-            lat: targetLat,
-            lng: targetLng,
+            lat: validation.lat,
+            lng: validation.lng,
             radius: 30,
           });
-      setDiscoverRooms(rooms);
-    } catch (err) {
-      console.error('[GeoChat] Discover rooms error:', err);
-      setDiscoverError(err.message || 'Failed to discover rooms.');
-    } finally {
-      setIsLoadingDiscover(false);
-    }
-  }, []);
+        }
+
+        const normalizedRooms = normalizeRoomsResponse(rooms);
+        setDiscoverRooms(normalizedRooms);
+        return normalizedRooms;
+      } catch (err) {
+        console.error('[GeoChat] Discover rooms error:', err);
+        const msg = err.message || 'Failed to discover rooms.';
+        setDiscoverError(msg);
+        throw err;
+      } finally {
+        setIsLoadingDiscover(false);
+      }
+    },
+    [token, lat, lng]
+  );
 
   const handleJoinRoom = useCallback(
     async (roomId, latArg, lngArg) => {

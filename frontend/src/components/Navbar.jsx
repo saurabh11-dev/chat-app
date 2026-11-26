@@ -5,11 +5,11 @@ import './Navbar.css';
 
 /**
  * Navbar Component
- * Displays clean GeoChat branding, route navigation tabs,
- * and a single clickable user account trigger that opens the Account Popover.
+ * Minimal top header displaying GeoChat branding on the left
+ * and a single clickable user account trigger on the right.
+ * Center navigation tabs are removed to keep the top bar clean and minimal.
  */
 export const Navbar = ({
-  currentRoute = ROUTES.HOME,
   onNavigate,
   isAuthenticated = false,
   currentUser = null,
@@ -23,9 +23,31 @@ export const Navbar = ({
     .toUpperCase();
   const handleText = currentUser?.handle ? `@${currentUser.handle}` : '@user';
 
+  const handleBrandClick = () => {
+    if (isAuthenticated && onNavigate) {
+      onNavigate(ROUTES.HOME);
+    }
+  };
+
   return (
     <header className="navbar">
-      <div className="navbar__brand">
+      <div
+        className={`navbar__brand ${isAuthenticated && onNavigate ? 'navbar__brand--clickable' : ''}`}
+        onClick={handleBrandClick}
+        role={isAuthenticated && onNavigate ? 'button' : undefined}
+        tabIndex={isAuthenticated && onNavigate ? 0 : undefined}
+        onKeyDown={
+          isAuthenticated && onNavigate
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleBrandClick();
+                }
+              }
+            : undefined
+        }
+        title={isAuthenticated ? 'GeoChat - Return to My Chats' : 'GeoChat'}
+      >
         <div className="navbar__logo-icon">
           <svg
             width="22"
@@ -46,32 +68,6 @@ export const Navbar = ({
           <span className="navbar__badge-tag">Location Chat</span>
         </div>
       </div>
-
-      {isAuthenticated && onNavigate && (
-        <nav className="navbar__nav" aria-label="Primary Navigation">
-          <button
-            type="button"
-            className={`navbar__nav-btn ${currentRoute === ROUTES.HOME ? 'navbar__nav-btn--active' : ''}`}
-            onClick={() => onNavigate(ROUTES.HOME)}
-          >
-            My Chats
-          </button>
-          <button
-            type="button"
-            className={`navbar__nav-btn ${currentRoute === ROUTES.DISCOVER ? 'navbar__nav-btn--active' : ''}`}
-            onClick={() => onNavigate(ROUTES.DISCOVER)}
-          >
-            Discover Rooms
-          </button>
-          <button
-            type="button"
-            className={`navbar__nav-btn ${currentRoute === ROUTES.NEW_ROOM ? 'navbar__nav-btn--active' : ''}`}
-            onClick={() => onNavigate(ROUTES.NEW_ROOM)}
-          >
-            + Create Room
-          </button>
-        </nav>
-      )}
 
       {isAuthenticated ? (
         <div className="navbar__status-area">
@@ -111,6 +107,7 @@ export const Navbar = ({
                 joinedRoomsCount={joinedRoomsCount}
                 onSignOut={onSignOut}
                 onClose={() => setIsAccountOpen(false)}
+                onNavigateHome={onNavigate ? () => onNavigate(ROUTES.HOME) : undefined}
               />
             )}
           </div>

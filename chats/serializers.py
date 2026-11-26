@@ -12,6 +12,18 @@ class ChatRoomSerializer(serializers.ModelSerializer):
     )
     distance_km = serializers.FloatField(read_only=True, required=False)
     is_member = serializers.SerializerMethodField()
+    lat = serializers.DecimalField(
+        source='latitude',
+        max_digits=9,
+        decimal_places=6,
+        read_only=True,
+    )
+    lng = serializers.DecimalField(
+        source='longitude',
+        max_digits=9,
+        decimal_places=6,
+        read_only=True,
+    )
     radius = serializers.DecimalField(
         source='radius_km',
         max_digits=5,
@@ -29,6 +41,8 @@ class ChatRoomSerializer(serializers.ModelSerializer):
             'created_by_handle',
             'latitude',
             'longitude',
+            'lat',
+            'lng',
             'radius_km',
             'radius',
             'is_active',
@@ -46,9 +60,16 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         ]
 
     def to_internal_value(self, data):
-        if isinstance(data, dict) and 'radius' in data and 'radius_km' not in data:
+        if isinstance(data, dict):
             mutable = data.copy()
-            mutable['radius_km'] = mutable.get('radius')
+            if 'radius' in mutable and 'radius_km' not in mutable:
+                mutable['radius_km'] = mutable.get('radius')
+            if 'lat' in mutable and 'latitude' not in mutable:
+                mutable['latitude'] = mutable.get('lat')
+            if 'lng' in mutable and 'longitude' not in mutable:
+                mutable['longitude'] = mutable.get('lng')
+            elif 'lon' in mutable and 'longitude' not in mutable:
+                mutable['longitude'] = mutable.get('lon')
             data = mutable
         return super().to_internal_value(data)
 

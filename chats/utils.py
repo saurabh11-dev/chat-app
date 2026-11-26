@@ -17,6 +17,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
         math.sin(delta_phi / 2.0) ** 2
         + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
     )
+    a = min(1.0, max(0.0, a))
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
     return round(earth_radius_km * c, 2)

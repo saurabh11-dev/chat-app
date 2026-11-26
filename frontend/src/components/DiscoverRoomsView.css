@@ -269,9 +269,35 @@
 }
 
 .discover-notice {
-  font-size: 0.78rem;
-  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.85rem;
   border-radius: var(--border-radius-sm);
+  line-height: 1.4;
+}
+
+.discover-notice__text {
+  flex: 1;
+}
+
+.discover-notice__dismiss {
+  background: none;
+  border: none;
+  color: currentColor;
+  opacity: 0.75;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.discover-notice__dismiss:hover {
+  opacity: 1;
 }
 
 .discover-notice--success {
@@ -359,8 +385,33 @@
   max-width: 440px;
 }
 
+.discover-empty-card__actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.discover-empty-card__browse-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.discover-empty-card__browse-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
 .discover-empty-card__create-btn {
-  margin-top: 0.5rem;
   background: rgba(56, 189, 248, 0.12);
   border: 1px solid rgba(56, 189, 248, 0.3);
   color: var(--color-primary);

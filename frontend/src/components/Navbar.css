@@ -34,15 +34,21 @@
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
+  overflow: visible;
 }
 
 .navbar__title {
   font-size: 1.35rem;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.01em;
+  padding: 0.05rem 0.2rem 0.05rem 0.25rem;
+  margin: 0;
+  display: inline-block;
   background: var(--color-accent-gradient);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  line-height: 1.25;
 }
 
 .navbar__badge-tag {
@@ -186,80 +192,20 @@
   background-color: var(--color-status-disconnected);
 }
 
-.navbar__nav {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  background-color: var(--color-bg-input);
-  border: var(--border-subtle);
-  padding: 0.25rem;
-  border-radius: var(--border-radius-md);
-}
-
-.navbar__nav-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.38rem 0.8rem;
-  border-radius: var(--border-radius-sm);
+.navbar__brand--clickable {
   cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-}
-
-.navbar__nav-btn:hover {
-  color: var(--color-text-primary);
-}
-
-.navbar__nav-btn--active {
-  background-color: var(--color-bg-surface-elevated);
-  color: var(--color-primary);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.navbar__user-pill {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.28);
-  padding: 0.28rem 0.65rem;
-  border-radius: var(--border-radius-pill);
-  white-space: nowrap;
-}
-
-.navbar__auth-action {
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.36rem 0.75rem;
   border-radius: var(--border-radius-sm);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
 
-.navbar__auth-action--signin {
-  background: var(--color-accent-gradient);
-  border: none;
-  color: #090d16;
-  font-weight: 700;
+.navbar__brand--clickable:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
-.navbar__auth-action--signin:hover {
-  filter: brightness(1.08);
-}
-
-.navbar__auth-action--signout {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  color: #fca5a5;
-}
-
-.navbar__auth-action--signout:hover {
-  background: rgba(239, 68, 68, 0.24);
-  color: #ffffff;
+.navbar__brand--clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
 }
 
 @keyframes pulse-dot {

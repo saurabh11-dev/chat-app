@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { getBrowserLocation, LOCATION_PRESETS } from '../utils/geolocation';
+import {
+  getBrowserLocation,
+  LOCATION_PRESETS,
+  validateCoordinates,
+} from '../utils/geolocation';
 import './DiscoverRoomsView.css';
 
 /**
@@ -26,31 +30,80 @@ export const DiscoverRoomsView = ({
   onNavigateCreateRoom,
 }) => {
   const [isDetectingGps, setIsDetectingGps] = useState(false);
-  const [gpsNotice, setGpsNotice] = useState(null);
+  const [statusNotice, setStatusNotice] = useState(null);
 
   // Auto-fetch nearby rooms on mount if list is empty and coordinates exist
   useEffect(() => {
     if (rooms.length === 0 && lat !== '' && lng !== '' && onDiscoverRooms) {
-      onDiscoverRooms(lat, lng, { includeAll: false });
+      const validation = validateCoordinates(lat, lng);
+      if (validation.valid) {
+        onDiscoverRooms(validation.lat, validation.lng, { includeAll: false }).catch((err) => {
+          setStatusNotice({
+            type: 'error',
+            text: err?.message || 'Failed to search nearby rooms.',
+          });
+        });
+      }
     }
     // Only run on initial mount of Discover page
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const executeSearchNearby = async (targetLat, targetLng) => {
+    onDismissError?.();
+    const validation = validateCoordinates(targetLat, targetLng);
+    if (!validation.valid) {
+      setStatusNotice({
+        type: 'error',
+        text: validation.error,
+      });
+      return;
+    }
+
+    setStatusNotice(null);
+    try {
+      const results = await onDiscoverRooms?.(validation.lat, validation.lng, {
+        includeAll: false,
+      });
+      const count = Array.isArray(results) ? results.length : (rooms?.length ?? 0);
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      if (count === 0) {
+        setStatusNotice({
+          type: 'info',
+          text: `Search complete: 0 rooms found within 30 km (${timeStr}).`,
+        });
+      } else {
+        setStatusNotice({
+          type: 'success',
+          text: `Search complete: found ${count} room${count === 1 ? '' : 's'} within 30 km (${timeStr}).`,
+        });
+      }
+    } catch (err) {
+      setStatusNotice({
+        type: 'error',
+        text: err.message || 'Failed to search nearby rooms.',
+      });
+    }
+  };
+
   const handleDetectGps = async () => {
     setIsDetectingGps(true);
-    setGpsNotice(null);
+    setStatusNotice(null);
     try {
       const pos = await getBrowserLocation();
       onLatChange?.(String(pos.lat));
       onLngChange?.(String(pos.lng));
-      setGpsNotice({
-        type: 'success',
-        text: `GPS detected: ${pos.lat}, ${pos.lng} (±${pos.accuracy}m)`,
+      setStatusNotice({
+        type: 'info',
+        text: `GPS detected: ${pos.lat}, ${pos.lng} (±${pos.accuracy}m). Searching nearby...`,
       });
-      onDiscoverRooms?.(pos.lat, pos.lng, { includeAll: false });
+      await executeSearchNearby(pos.lat, pos.lng);
     } catch (err) {
-      setGpsNotice({ type: 'error', text: err.message });
+      setStatusNotice({ type: 'error', text: err.message });
     } finally {
       setIsDetectingGps(false);
     }
@@ -59,17 +112,38 @@ export const DiscoverRoomsView = ({
   const handleApplyPreset = (preset) => {
     onLatChange?.(String(preset.lat));
     onLngChange?.(String(preset.lng));
-    setGpsNotice({ type: 'info', text: `Location set to ${preset.name}` });
-    onDiscoverRooms?.(preset.lat, preset.lng, { includeAll: false });
+    setStatusNotice({ type: 'info', text: `Location set to ${preset.name}. Searching nearby...` });
+    executeSearchNearby(preset.lat, preset.lng);
   };
 
   const handleSearchNearby = (e) => {
-    e.preventDefault();
-    onDiscoverRooms?.(lat, lng, { includeAll: false });
+    if (e?.preventDefault) {
+      e.preventDefault();
+    }
+    executeSearchNearby(lat, lng);
   };
 
-  const handleBrowseAll = () => {
-    onDiscoverRooms?.(lat, lng, { includeAll: true });
+  const handleBrowseAll = async () => {
+    onDismissError?.();
+    setStatusNotice(null);
+    try {
+      const results = await onDiscoverRooms?.(lat, lng, { includeAll: true });
+      const count = Array.isArray(results) ? results.length : 0;
+      const timeStr = new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      setStatusNotice({
+        type: 'info',
+        text: `Showing all ${count} active room${count === 1 ? '' : 's'} (${timeStr}).`,
+      });
+    } catch (err) {
+      setStatusNotice({
+        type: 'error',
+        text: err.message || 'Failed to load active rooms.',
+      });
+    }
   };
 
   return (
@@ -140,7 +214,7 @@ export const DiscoverRoomsView = ({
           </div>
         </div>
 
-        <form className="discover-coords-form" onSubmit={handleSearchNearby}>
+        <form className="discover-coords-form" onSubmit={handleSearchNearby} noValidate>
           <div className="discover-coords-inputs">
             <div className="discover-field">
               <label htmlFor="discover-lat-input">Latitude</label>
@@ -151,7 +225,6 @@ export const DiscoverRoomsView = ({
                 value={lat}
                 onChange={(e) => onLatChange?.(e.target.value)}
                 placeholder="25.2893"
-                required
               />
             </div>
             <div className="discover-field">
@@ -163,7 +236,6 @@ export const DiscoverRoomsView = ({
                 value={lng}
                 onChange={(e) => onLngChange?.(e.target.value)}
                 placeholder="83.0064"
-                required
               />
             </div>
           </div>
@@ -191,10 +263,18 @@ export const DiscoverRoomsView = ({
           </div>
         </form>
 
-        {gpsNotice && (
-          <p className={`discover-notice discover-notice--${gpsNotice.type}`}>
-            {gpsNotice.text}
-          </p>
+        {statusNotice && (
+          <div className={`discover-notice discover-notice--${statusNotice.type}`} role="status">
+            <span className="discover-notice__text">{statusNotice.text}</span>
+            <button
+              type="button"
+              className="discover-notice__dismiss"
+              onClick={() => setStatusNotice(null)}
+              aria-label="Dismiss message"
+            >
+              ×
+            </button>
+          </div>
         )}
       </section>
 
@@ -249,15 +329,26 @@ export const DiscoverRoomsView = ({
               Try detecting your GPS, selecting a preset location, or clicking{' '}
               <strong>Browse All Active</strong> to view all rooms.
             </p>
-            {onNavigateCreateRoom && (
-              <button
-                type="button"
-                className="discover-empty-card__create-btn"
-                onClick={onNavigateCreateRoom}
-              >
-                + Create Geofenced Room Here
-              </button>
-            )}
+            <div className="discover-empty-card__actions">
+              {roomListMode !== 'all' && (
+                <button
+                  type="button"
+                  className="discover-empty-card__browse-btn"
+                  onClick={handleBrowseAll}
+                >
+                  Browse All Active Rooms
+                </button>
+              )}
+              {onNavigateCreateRoom && (
+                <button
+                  type="button"
+                  className="discover-empty-card__create-btn"
+                  onClick={onNavigateCreateRoom}
+                >
+                  + Create Geofenced Room Here
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="discover-grid">
@@ -277,7 +368,7 @@ export const DiscoverRoomsView = ({
                     </h4>
                     <span className="discover-room-card__distance">
                       {room.distance_km != null
-                        ? `${room.distance_km} km away`
+                        ? `${Number(room.distance_km).toFixed(2)} km away`
                         : `${room.radius_km || 30} km radius`}
                     </span>
                   </div>

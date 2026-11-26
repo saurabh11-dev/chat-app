@@ -442,5 +442,170 @@ class RoomMessageHistoryTests(APITestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    def test_find_rooms_within_30km_discovery_filtering(self):
+        """
+        Verify that room discovery filters rooms within search_radius (default 30 km),
+        calculates accurate distance_km, sorts results by distance ascending,
+        supports both 'radius' and 'radius_km' query parameters, and includes rooms
+        even if the room's individual geofence radius_km is smaller than 30 km.
+        """
+        self.client.force_authenticate(user=self.user2)
+
+        # Base user location: Varanasi Cantt (25.3284, 82.9856)
+        user_lat = 25.3284
+        user_lng = 82.9856
+
+        # Room A: ~4.5 km away, small room geofence (radius_km=5.0)
+        room_near = ChatRoom.objects.create(
+            name="Varanasi Ghats Room",
+            description="Near ghats",
+            created_by=self.user1,
+            latitude=Decimal("25.310000"),
+            longitude=Decimal("83.010000"),
+            radius_km=Decimal("5.00"),
+            is_active=True,
+        )
+
+        # Room B: ~17.5 km away, room geofence is 10.0 km
+        # User is outside room's individual geofence, but WITHIN 30 km discovery radius
+        room_mid = ChatRoom.objects.create(
+            name="Sarnath Heritage Room",
+            description="Historical zone",
+            created_by=self.user1,
+            latitude=Decimal("25.381100"),
+            longitude=Decimal("83.021400"),
+            radius_km=Decimal("10.00"),
+            is_active=True,
+        )
+
+        # Room C: ~55 km away (outside 30 km)
+        room_far = ChatRoom.objects.create(
+            name="Jaunpur Outskirts Room",
+            description="Too far away",
+            created_by=self.user1,
+            latitude=Decimal("25.750000"),
+            longitude=Decimal("82.680000"),
+            radius_km=Decimal("50.00"),
+            is_active=True,
+        )
+
+        # 1. Query with radius=30
+        res_30 = self.client.get(
+            f"/api/chats/rooms/?lat={user_lat}&lng={user_lng}&radius=30"
+        )
+        self.assertEqual(res_30.status_code, status.HTTP_200_OK)
+        returned_ids_30 = [r["id"] for r in res_30.data]
+
+        # Room A and Room B must be included (both <= 30 km)
+        self.assertIn(room_near.id, returned_ids_30)
+        self.assertIn(room_mid.id, returned_ids_30)
+        # Room C must be excluded (> 30 km)
+        self.assertNotIn(room_far.id, returned_ids_30)
+
+        # Check distances are calculated and sorted ascending
+        distances = [r["distance_km"] for r in res_30.data if r["id"] in (room_near.id, room_mid.id)]
+        self.assertEqual(distances, sorted(distances))
+        for r in res_30.data:
+            self.assertIsNotNone(r["distance_km"])
+            self.assertLessEqual(r["distance_km"], 30.0)
+
+        # 2. Query with 'radius_km=30' alias parameter
+        res_alias = self.client.get(
+            f"/api/chats/rooms/?lat={user_lat}&lng={user_lng}&radius_km=30"
+        )
+        self.assertEqual(res_alias.status_code, status.HTTP_200_OK)
+        returned_ids_alias = [r["id"] for r in res_alias.data]
+        self.assertIn(room_near.id, returned_ids_alias)
+        self.assertIn(room_mid.id, returned_ids_alias)
+        self.assertNotIn(room_far.id, returned_ids_alias)
+
+        # 3. Empty state: search with remote coordinates returns 0 rooms
+        res_empty = self.client.get(
+            "/api/chats/rooms/?lat=0.0&lng=0.0&radius=30"
+        )
+        self.assertEqual(res_empty.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_empty.data), 0)
+
+    def test_room_created_by_user_a_discovered_and_joined_by_user_b_at_exact_coordinates(self):
+        """
+        Account A creates a room with current coordinates (lat, lng) and radius.
+        Account B queries GET /api/chats/rooms/?lat=<lat>&lng=<lng>&radius=30 using the exact same coordinates.
+        Verify the created room IS returned with distance_km == 0 (and is_member == False).
+        Account B can then join it via POST /api/chats/rooms/<id>/join/.
+        """
+        # User A creates room via POST /api/chats/rooms/
+        self.client.force_authenticate(user=self.user1)
+        test_lat = 25.289300
+        test_lng = 83.006400
+
+        res_create = self.client.post(
+            "/api/chats/rooms/",
+            {
+                "name": "User A Varanasi Hangout",
+                "description": "Room created by Account A",
+                "latitude": test_lat,
+                "longitude": test_lng,
+                "radius_km": 30.00,
+            },
+        )
+        self.assertEqual(res_create.status_code, status.HTTP_201_CREATED)
+        created_room_id = res_create.data["id"]
+        self.assertTrue(res_create.data["is_member"])
+
+        # Also create a room using short key aliases (lat, lng, radius)
+        res_create_alias = self.client.post(
+            "/api/chats/rooms/",
+            {
+                "name": "User A Short Key Room",
+                "description": "Created with lat/lng/radius keys",
+                "lat": test_lat,
+                "lng": test_lng,
+                "radius": 15.00,
+            },
+        )
+        self.assertEqual(res_create_alias.status_code, status.HTTP_201_CREATED)
+        alias_room_id = res_create_alias.data["id"]
+
+        # User B queries 30 km discovery at exact same coordinates
+        self.client.force_authenticate(user=self.user2)
+        res_discover = self.client.get(
+            f"/api/chats/rooms/?lat={test_lat}&lng={test_lng}&radius=30"
+        )
+        self.assertEqual(res_discover.status_code, status.HTTP_200_OK)
+
+        discovered_room = next(
+            (r for r in res_discover.data if r["id"] == created_room_id),
+            None,
+        )
+        self.assertIsNotNone(discovered_room, "Created room must appear in discovery results for User B")
+        self.assertEqual(discovered_room["distance_km"], 0.0)
+        self.assertFalse(discovered_room["is_member"])
+
+        discovered_alias_room = next(
+            (r for r in res_discover.data if r["id"] == alias_room_id),
+            None,
+        )
+        self.assertIsNotNone(discovered_alias_room, "Alias created room must appear in discovery results")
+        self.assertEqual(discovered_alias_room["distance_km"], 0.0)
+        self.assertFalse(discovered_alias_room["is_member"])
+
+        # Discovery using 'lon' alias also returns the rooms
+        res_lon = self.client.get(
+            f"/api/chats/rooms/?lat={test_lat}&lon={test_lng}&radius=30"
+        )
+        self.assertEqual(res_lon.status_code, status.HTTP_200_OK)
+        self.assertIn(created_room_id, [r["id"] for r in res_lon.data])
+
+        # User B can join via POST /api/chats/rooms/<id>/join/
+        join_url = f"/api/chats/rooms/{created_room_id}/join/"
+        res_join = self.client.post(
+            join_url,
+            {"lat": test_lat, "lng": test_lng},
+        )
+        self.assertEqual(res_join.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_join.data["is_active"])
+        self.assertEqual(res_join.data["handle"], self.user2.handle)
+
+
 
 
