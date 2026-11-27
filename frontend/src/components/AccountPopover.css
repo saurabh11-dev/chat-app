@@ -2,7 +2,7 @@
   position: absolute;
   top: calc(100% + 0.6rem);
   right: 0;
-  width: 310px;
+  width: 330px;
   max-width: calc(100vw - 2rem);
   background-color: var(--color-bg-surface-elevated);
   border: var(--border-default);
@@ -119,13 +119,39 @@
   gap: 0.65rem;
 }
 
+.account-popover__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
 .account-popover__section-title {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-muted);
-  margin-bottom: 0.15rem;
+}
+
+.account-popover__edit-trigger {
+  background: none;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.18rem 0.48rem;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all var(--transition-fast);
+}
+
+.account-popover__edit-trigger:hover {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.45);
 }
 
 .account-popover__detail-item {
@@ -177,6 +203,172 @@
   border-radius: var(--border-radius-pill);
 }
 
+/* Edit Mode Styles */
+.account-popover__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-popover__form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.account-popover__label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.account-popover__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.account-popover__status-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.account-popover__status-badge--available {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.account-popover__status-badge--taken,
+.account-popover__status-badge--error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.account-popover__status-badge--current {
+  color: var(--color-primary);
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+
+.account-popover__status-badge--checking {
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-style: italic;
+}
+
+.account-popover__input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.account-popover__input-prefix {
+  position: absolute;
+  left: 0.65rem;
+  color: var(--color-primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.account-popover__input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  padding: 0.45rem 0.65rem;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.account-popover__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.account-popover__input--with-prefix {
+  padding-left: 1.55rem;
+}
+
+.account-popover__input--mono {
+  font-family: var(--font-mono);
+}
+
+.account-popover__alert {
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--border-radius-md);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.account-popover__alert--error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.account-popover__edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.account-popover__cancel-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.42rem 0.6rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-popover__cancel-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--color-text-primary);
+}
+
+.account-popover__save-btn {
+  flex: 1.4;
+  background: var(--color-accent-gradient);
+  border: none;
+  color: #090d16;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.42rem 0.6rem;
+  border-radius: var(--border-radius-md);
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--color-primary-glow);
+  transition: all var(--transition-fast);
+}
+
+.account-popover__save-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 0 14px var(--color-primary-glow);
+}
+
+.account-popover__save-btn:disabled,
+.account-popover__cancel-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Footer Styles */
 .account-popover__footer {
   padding: 0.85rem 1.15rem;
   border-top: var(--border-subtle);

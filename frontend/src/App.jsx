@@ -420,6 +420,13 @@ export function App() {
     setRoute(ROUTES.HOME);
   }, []);
 
+  const handleUpdateUser = useCallback((updatedUser) => {
+    if (!updatedUser || typeof updatedUser !== 'object') return;
+    setCurrentUser(updatedUser);
+    currentUserRef.current = updatedUser;
+    setMessages((prev) => prev.map((m) => normalizeMessage(m, updatedUser)));
+  }, []);
+
   const handleSignOut = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -688,6 +695,8 @@ export function App() {
         onNavigate={navigate}
         isAuthenticated={isAuthenticated}
         currentUser={currentUser}
+        token={token}
+        onUpdateUser={handleUpdateUser}
         joinedRoomsCount={joinedRooms.length}
         onSignOut={handleSignOut}
       />

@@ -3,8 +3,35 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 
+class CustomQuerySet(models.QuerySet):
+  def filter(self, *args, **kwargs):
+    new_kwargs = {}
+    for k, v in kwargs.items():
+      if k == "username":
+        new_kwargs["handle"] = v
+      elif k.startswith("username__"):
+        new_kwargs["handle__" + k[len("username__"):]] = v
+      else:
+        new_kwargs[k] = v
+    return super().filter(*args, **new_kwargs)
+
+  def exclude(self, *args, **kwargs):
+    new_kwargs = {}
+    for k, v in kwargs.items():
+      if k == "username":
+        new_kwargs["handle"] = v
+      elif k.startswith("username__"):
+        new_kwargs["handle__" + k[len("username__"):]] = v
+      else:
+        new_kwargs[k] = v
+    return super().exclude(*args, **new_kwargs)
+
+
 class CustomUserManager(BaseUserManager):
   """Custom manager where email is the unique identifier for authentication."""
+
+  def get_queryset(self):
+    return CustomQuerySet(self.model, using=self._db)
 
   def create_user(self, email, mobile_number, password=None, **extra_fields):
     if not email:
@@ -64,6 +91,14 @@ class User(AbstractUser):
   USERNAME_FIELD = "email"
   REQUIRED_FIELDS = ["mobile_number"]
 
+  @property
+  def username(self):
+    return self.handle
+
+  @username.setter
+  def username(self, value):
+    self.handle = value
+
   def save(self, *args, **kwargs):
    
     if not self.handle:
@@ -73,6 +108,12 @@ class User(AbstractUser):
           self.handle = candidate
           break
     super().save(*args, **kwargs)
+    if self.handle:
+      try:
+        from .bloom import get_username_bloom_filter
+        get_username_bloom_filter().add(self.handle)
+      except Exception:
+        pass
 
   def __str__(self):
     return f"{self.email} -> [{self.handle}]"

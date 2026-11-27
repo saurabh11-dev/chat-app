@@ -182,5 +182,17 @@ export const buildCreateRoomApiUrl = () => {
   return `${API_BASE_URL}/api/chats/rooms/`;
 };
 
+/**
+ * Helper to construct the username availability REST API endpoint.
+ * Format: http://127.0.0.1:8000/api/accounts/username-availability/?username=<username>
+ *
+ * @param {string} username - Target username to check
+ * @returns {string} Username availability endpoint URL
+ */
+export const buildUsernameAvailabilityApiUrl = (username) => {
+  const cleanUsername = encodeURIComponent(String(username ?? '').trim().replace(/^@/, ''));
+  return `${API_BASE_URL}/api/accounts/username-availability/?username=${cleanUsername}`;
+};
+
 
 

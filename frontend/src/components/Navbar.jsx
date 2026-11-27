@@ -13,7 +13,9 @@ export const Navbar = ({
   onNavigate,
   isAuthenticated = false,
   currentUser = null,
+  token = '',
   joinedRoomsCount = 0,
+  onUpdateUser,
   onSignOut,
 }) => {
   const [isAccountOpen, setIsAccountOpen] = useState(false);
@@ -104,7 +106,9 @@ export const Navbar = ({
             {isAccountOpen && (
               <AccountPopover
                 currentUser={currentUser}
+                token={token}
                 joinedRoomsCount={joinedRoomsCount}
+                onUpdateUser={onUpdateUser}
                 onSignOut={onSignOut}
                 onClose={() => setIsAccountOpen(false)}
                 onNavigateHome={onNavigate ? () => onNavigate(ROUTES.HOME) : undefined}

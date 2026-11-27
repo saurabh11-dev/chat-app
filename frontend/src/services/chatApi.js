@@ -10,6 +10,7 @@ import {
   buildRegisterApiUrl,
   buildJoinedRoomsApiUrl,
   buildCreateRoomApiUrl,
+  buildUsernameAvailabilityApiUrl,
 } from '../config/env';
 import { isValidJwt, extractAccessToken, sanitizeToken } from '../utils/messageUtils';
 import { normalizeRoomsResponse } from '../utils/geolocation';
@@ -610,6 +611,100 @@ export async function registerUser({ email, mobile_number, password, signal }) {
     hasTokens: Boolean(access),
     user: data,
   };
+}
+
+/**
+ * Checks whether a username is available via Bloom filter + DB check (`GET /api/accounts/username-availability/?username=...`).
+ *
+ * @param {object} options
+ * @param {string} options.username - The username to check
+ * @param {string} [options.token] - Optional JWT token for authenticated check
+ * @param {AbortSignal} [options.signal] - Optional abort signal
+ * @returns {Promise<{ available: boolean, is_current?: boolean, username: string, detail?: string, error?: string }>}
+ */
+export async function checkUsernameAvailability({ username, token, signal }) {
+  const cleanUsername = typeof username === 'string' ? username.trim().replace(/^@/, '') : '';
+  const url = buildUsernameAvailabilityApiUrl(cleanUsername);
+
+  const headers = {
+    Accept: 'application/json',
+  };
+  if (token && isValidJwt(token)) {
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response, 'Failed to check username availability');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Updates the authenticated user profile (`PATCH /api/accounts/profile/`).
+ * Supports updating username/handle and display name (first_name, last_name, or name).
+ *
+ * @param {object} options
+ * @param {string} options.token - JWT Access Token
+ * @param {string} [options.username] - Updated username
+ * @param {string} [options.handle] - Updated handle alias
+ * @param {string} [options.name] - Updated display name (split into first/last)
+ * @param {string} [options.first_name] - Optional first name
+ * @param {string} [options.last_name] - Optional last name
+ * @param {AbortSignal} [options.signal]
+ * @returns {Promise<object>} Serialized updated user profile
+ */
+export async function updateUserProfile({
+  token,
+  username,
+  handle,
+  name,
+  first_name,
+  last_name,
+  signal,
+}) {
+  const cleanToken = requireValidToken(token, 'update profile');
+  const payload = {};
+
+  const userHandle = username !== undefined ? username : handle;
+  if (userHandle !== undefined) {
+    payload.username = String(userHandle).trim().replace(/^@/, '');
+    payload.handle = payload.username;
+  }
+
+  if (name !== undefined) {
+    payload.name = String(name).trim();
+  }
+  if (first_name !== undefined) {
+    payload.first_name = String(first_name).trim();
+  }
+  if (last_name !== undefined) {
+    payload.last_name = String(last_name).trim();
+  }
+
+  const url = buildUserProfileApiUrl();
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${cleanToken}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response, 'Failed to update profile');
+  }
+
+  return await response.json();
 }
 
 

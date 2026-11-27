@@ -20,8 +20,23 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+  username = serializers.CharField(source='handle', required=False)
+  name = serializers.SerializerMethodField(read_only=True)
+
   class Meta:
     model = User
-    fields = ['id', 'email', 'mobile_number', 'handle', 'first_name', 'last_name']
-
+    fields = [
+        'id',
+        'email',
+        'mobile_number',
+        'handle',
+        'username',
+        'first_name',
+        'last_name',
+        'name',
+    ]
     read_only_fields = ['id', 'email', 'mobile_number']
+
+  def get_name(self, obj):
+    full_name = f"{obj.first_name or ''} {obj.last_name or ''}".strip()
+    return full_name or obj.handle
