@@ -35,6 +35,7 @@ class UsernameAvailabilityView(APIView):
       return Response(
           {
               "available": False,
+              "is_available": False,
               "detail": "The 'username' query parameter is required.",
               "error": "The 'username' query parameter is required.",
           },
@@ -46,6 +47,7 @@ class UsernameAvailabilityView(APIView):
       return Response(
           {
               "available": False,
+              "is_available": False,
               "is_current": False,
               "username": clean,
               "detail": error_msg,

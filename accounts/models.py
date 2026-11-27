@@ -117,3 +117,19 @@ class User(AbstractUser):
 
   def __str__(self):
     return f"{self.email} -> [{self.handle}]"
+
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+
+@receiver(post_save, sender=User)
+def user_post_save_sync_bloom(sender, instance, **kwargs):
+  """Ensures newly created or updated users are always registered in the Bloom filter."""
+  if instance.handle:
+    try:
+      from .bloom import get_username_bloom_filter
+
+      get_username_bloom_filter().add(instance.handle)
+    except Exception:
+      pass

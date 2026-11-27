@@ -63,8 +63,10 @@ console.log('--- Testing accountChange (Username Availability & Profile) ---');
     if (!/^[a-zA-Z0-9_]+$/.test(clean)) return { valid: false, type: 'error', message: 'Letters, numbers, _ only' };
 
     if (!apiResult) return { valid: false, type: 'checking', message: 'Checking...' };
-    if (apiResult.is_current) return { valid: true, type: 'current', message: 'Current username' };
-    if (apiResult.available) return { valid: true, type: 'available', message: 'Available' };
+    const isCurrent = Boolean(apiResult.is_current ?? apiResult.isCurrent);
+    const isAvailable = Boolean(apiResult.available ?? apiResult.is_available);
+    if (isCurrent) return { valid: true, type: 'current', message: 'Current username' };
+    if (isAvailable) return { valid: true, type: 'available', message: 'Available' };
     return { valid: false, type: 'taken', message: apiResult.detail || 'Already taken' };
   }
 
@@ -82,7 +84,7 @@ console.log('--- Testing accountChange (Username Availability & Profile) ---');
     'available'
   );
 
-  // Taken from API
+  // Taken from API (via available: false)
   assert.strictEqual(
     resolveAvailabilityStatus({
       input: 'taken_handle',
@@ -92,7 +94,65 @@ console.log('--- Testing accountChange (Username Availability & Profile) ---');
     'taken'
   );
 
+  // Taken from API (via is_available: false alternate key)
+  assert.strictEqual(
+    resolveAvailabilityStatus({
+      input: 'taken_handle_2',
+      currentUsername: 'Tester_1',
+      apiResult: { is_available: false, detail: 'Username is already taken.' },
+    }).type,
+    'taken'
+  );
+
+  // Available from API (via is_available: true alternate key)
+  assert.strictEqual(
+    resolveAvailabilityStatus({
+      input: 'cool_handle',
+      currentUsername: 'Tester_1',
+      apiResult: { is_available: true },
+    }).type,
+    'available'
+  );
+
   console.log('✓ Availability status mapping tests passed');
 }
 
+// 5. Request cancellation & staleness guard logic
+{
+  let latestRequestedInput = '';
+
+  function handleAvailabilityResponse({ requestedInput, res }) {
+    if (requestedInput.toLowerCase() !== latestRequestedInput.toLowerCase()) {
+      return null; // Discard stale response
+    }
+    const isAvailable = Boolean(res?.available ?? res?.is_available);
+    const isCurrent = Boolean(res?.is_current ?? res?.isCurrent);
+    if (isCurrent) return 'current';
+    if (isAvailable) return 'available';
+    return 'taken';
+  }
+
+  // User typed 'user_a'
+  latestRequestedInput = 'user_a';
+  // User then quickly typed 'user_ab'
+  latestRequestedInput = 'user_ab';
+
+  // Stale response arrives for 'user_a' -> should be discarded
+  const staleResult = handleAvailabilityResponse({
+    requestedInput: 'user_a',
+    res: { available: true },
+  });
+  assert.strictEqual(staleResult, null);
+
+  // Fresh response arrives for 'user_ab' -> accepted
+  const freshResult = handleAvailabilityResponse({
+    requestedInput: 'user_ab',
+    res: { available: false, detail: 'Already taken' },
+  });
+  assert.strictEqual(freshResult, 'taken');
+
+  console.log('✓ Request staleness guard tests passed');
+}
+
 console.log('All accountChange tests passed successfully!');
+

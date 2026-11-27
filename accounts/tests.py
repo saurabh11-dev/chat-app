@@ -188,6 +188,99 @@ class UsernameAvailabilityEndpointTests(APITestCase):
     self.assertEqual(res_blank.status_code, status.HTTP_400_BAD_REQUEST)
     self.assertFalse(res_blank.data["available"])
 
+  def test_preexisting_username_shows_unavailable_even_if_bloom_filter_is_cold_or_cleared(self):
+    """
+    Regression Test:
+    Even if the in-memory Bloom filter was cold, cleared, or out of sync across worker processes,
+    querying a pre-existing username MUST accurately report unavailable (available: False).
+    It must also self-heal by registering the discovered username into the Bloom filter.
+    """
+    User.objects.create_user(
+        email="coldtest@example.com",
+        mobile_number="5554443322",
+        password="password123",
+        handle="ColdDbUser_99",
+    )
+
+    # Force the Bloom filter to be completely cold and cleared
+    bf = get_username_bloom_filter()
+    bf.clear()
+    self.assertFalse(bf.might_contain("ColdDbUser_99"))
+
+    # Live availability check endpoint call
+    url = "/api/accounts/username-availability/?username=ColdDbUser_99"
+    response = self.client.get(url)
+
+    self.assertEqual(response.status_code, status.HTTP_200_OK)
+    self.assertFalse(
+        response.data["available"],
+        "Expected pre-existing username to be unavailable even if Bloom filter was cold!",
+    )
+    self.assertFalse(response.data["is_available"])
+    self.assertIn("already taken", response.data["detail"].lower())
+
+    # Verify self-healing: Bloom filter should now contain ColdDbUser_99
+    self.assertTrue(bf.might_contain("ColdDbUser_99"))
+    self.assertTrue(bf.might_contain("colddbuser_99"))
+
+  def test_unused_username_shows_available_when_bloom_filter_is_cold(self):
+    """Unused valid username returns available: True cleanly even when Bloom filter is cold."""
+    bf = get_username_bloom_filter()
+    bf.clear()
+
+    url = "/api/accounts/username-availability/?username=FreshUnusedHandle_77"
+    response = self.client.get(url)
+
+    self.assertEqual(response.status_code, status.HTTP_200_OK)
+    self.assertTrue(response.data["available"])
+    self.assertTrue(response.data["is_available"])
+    self.assertFalse(response.data.get("is_current", False))
+
+  def test_existing_user_silent_cipher_50_unavailable_and_profile_update_rejected(self):
+    """
+    Direct regression test for the reported issue:
+    User A has handle SilentCipher_50 in the database.
+    User B has handle SilentCipher_51.
+    Bloom filter is NOT manually pre-seeded in this test.
+    Verify:
+    1. Availability check for SilentCipher_50 reports available: false.
+    2. User B attempting to update profile to SilentCipher_50 is rejected cleanly with 400.
+    """
+    user_a = User.objects.create_user(
+        email="user_a@example.com",
+        mobile_number="7771112233",
+        password="password123",
+        handle="SilentCipher_50",
+    )
+    user_b = User.objects.create_user(
+        email="user_b@example.com",
+        mobile_number="7771112244",
+        password="password123",
+        handle="SilentCipher_51",
+    )
+
+    # Clear bloom filter so it is NOT manually pre-seeded
+    get_username_bloom_filter().clear()
+
+    # User B checks availability while editing
+    self.client.force_authenticate(user=user_b)
+    res_avail = self.client.get("/api/accounts/username-availability/?username=SilentCipher_50")
+    self.assertEqual(res_avail.status_code, status.HTTP_200_OK)
+    self.assertFalse(res_avail.data["available"])
+    self.assertFalse(res_avail.data["is_available"])
+    self.assertIn("already taken", res_avail.data["detail"].lower())
+
+    # User B attempts to save changes with SilentCipher_50
+    res_patch = self.client.patch("/api/accounts/profile/", {"username": "SilentCipher_50"})
+    self.assertEqual(res_patch.status_code, status.HTTP_400_BAD_REQUEST)
+    self.assertIn("already taken", res_patch.data["detail"].lower())
+
+    # User B's handle remains unchanged
+    user_b.refresh_from_db()
+    self.assertEqual(user_b.handle, "SilentCipher_51")
+
+
+
 
 class UserProfileUpdateEndpointTests(APITestCase):
   """Tests for PATCH /api/accounts/profile/."""

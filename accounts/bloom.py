@@ -42,6 +42,7 @@ class BloomFilter:
         self.byte_count = (self.m + 7) // 8
         self.bit_array = bytearray(self.byte_count)
         self.count = 0
+        self.is_warmed_up = False
 
     @staticmethod
     def normalize(item: str) -> str:
@@ -95,6 +96,7 @@ class BloomFilter:
         """Resets the bit array and added count."""
         self.bit_array = bytearray(self.byte_count)
         self.count = 0
+        self.is_warmed_up = False
 
 
 # Global singleton instance for the process
@@ -109,7 +111,7 @@ def get_username_bloom_filter() -> BloomFilter:
     return _bloom_filter_instance
 
 
-def warm_up_bloom_filter(bf: Optional[BloomFilter] = None) -> int:
+def warm_up_bloom_filter(bf: Optional[BloomFilter] = None, force: bool = False) -> int:
     """
     Safely loads all existing usernames/handles from DB into the Bloom filter.
     Guards against missing tables during migrations/tests so it never crashes.
@@ -117,6 +119,8 @@ def warm_up_bloom_filter(bf: Optional[BloomFilter] = None) -> int:
     import warnings
 
     filter_obj = bf if bf is not None else get_username_bloom_filter()
+    if filter_obj.is_warmed_up and not force:
+        return filter_obj.count
 
     try:
         from django.contrib.auth import get_user_model
@@ -139,11 +143,13 @@ def warm_up_bloom_filter(bf: Optional[BloomFilter] = None) -> int:
                     filter_obj.add(handle)
                     count += 1
 
+            filter_obj.is_warmed_up = True
             logger.info("Warmed up username Bloom filter with %d existing usernames.", count)
             return count
     except Exception as e:
         logger.warning("Could not warm up username Bloom filter: %s", e)
         return 0
+
 
 
 
@@ -179,21 +185,16 @@ def check_username_availability(username: str, current_user=None) -> dict:
     """
     Checks if a username is available.
     - If user is authenticated and matches own current username:
-        available: True, is_current: True
-    - Checks Bloom filter first:
-        if might_contain == False:
-            available: True, is_current: False (source='bloom_filter')
-    - If might_contain == True:
-        confirm against DB:
-            exists in DB (excluding current_user if any):
-                available: False, is_current: False (source='database')
-            else (false positive):
-                available: True, is_current: False (source='database_fallback')
+        available: True, is_available: True, is_current: True
+    - Verifies against DB as final source of truth and syncs into Bloom filter.
+    - If Bloom filter was cold, cleared, or out of sync across worker processes,
+      the DB lookup guarantees that already-taken usernames NEVER falsely show as available.
     """
     is_valid, error_msg, clean = validate_username_format(username)
     if not is_valid:
         return {
             "available": False,
+            "is_available": False,
             "is_current": False,
             "username": clean,
             "detail": error_msg,
@@ -210,6 +211,7 @@ def check_username_availability(username: str, current_user=None) -> dict:
         if current_handle and str(current_handle).strip().lower() == clean.lower():
             return {
                 "available": True,
+                "is_available": True,
                 "is_current": True,
                 "username": clean,
                 "detail": "This is your current username.",
@@ -217,35 +219,39 @@ def check_username_availability(username: str, current_user=None) -> dict:
 
     bf = get_username_bloom_filter()
 
-    # 1. Bloom filter check: if False, DEFINITELY NOT taken (no DB query needed)
-    if not bf.might_contain(clean):
-        return {
-            "available": True,
-            "is_current": False,
-            "username": clean,
-            "detail": "Username is available.",
-            "source": "bloom_filter",
-        }
+    # Ensure filter is warmed up if it hasn't been yet
+    if not getattr(bf, "is_warmed_up", False):
+        warm_up_bloom_filter(bf)
 
-    # 2. Bloom filter might_contain() is True -> verify with database (final source of truth)
+    might_be_in_filter = bf.might_contain(clean)
+
+    # Always verify against the database as the final source of truth:
+    # 1. If might_be_in_filter is True, confirms whether it's truly taken or a false positive.
+    # 2. If might_be_in_filter is False, confirms against DB in case the Bloom filter
+    #    was cold, cleared, or out of sync across worker processes.
     qs = User.objects.filter(handle__iexact=clean)
     if current_user and getattr(current_user, "is_authenticated", False):
         qs = qs.exclude(pk=current_user.pk)
 
     if qs.exists():
+        # Ensure Bloom filter is updated with this taken username (self-healing cache)
+        bf.add(clean)
         return {
             "available": False,
+            "is_available": False,
             "is_current": False,
             "username": clean,
             "detail": "Username is already taken.",
             "source": "database",
         }
 
-    # False positive in Bloom filter, but actually available in DB
+    # Username does not exist in DB -> definitely available!
     return {
         "available": True,
+        "is_available": True,
         "is_current": False,
         "username": clean,
         "detail": "Username is available.",
-        "source": "database_fallback",
+        "source": "bloom_filter" if not might_be_in_filter else "database_fallback",
     }
+

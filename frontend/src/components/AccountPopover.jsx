@@ -27,6 +27,7 @@ export const AccountPopover = ({
   onNavigateHome,
 }) => {
   const popoverRef = useRef(null);
+  const latestCleanRef = useRef('');
 
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -85,6 +86,7 @@ export const AccountPopover = ({
     if (!isEditing) return;
 
     const clean = editUsername.trim().replace(/^@/, '');
+    latestCleanRef.current = clean;
     const currentNorm = (currentUser?.handle || currentUser?.username || '').trim().toLowerCase();
 
     if (!clean) {
@@ -150,7 +152,15 @@ export const AccountPopover = ({
           signal: controller.signal,
         });
 
-        if (res.is_current) {
+        // Staleness guard: ignore if user has typed something newer
+        if (latestCleanRef.current.toLowerCase() !== clean.toLowerCase()) {
+          return;
+        }
+
+        const isCurrent = Boolean(res?.is_current ?? res?.isCurrent);
+        const isAvailable = Boolean(res?.available ?? res?.is_available);
+
+        if (isCurrent) {
           setAvailabilityStatus({
             checking: false,
             available: true,
@@ -158,7 +168,7 @@ export const AccountPopover = ({
             message: 'Current username',
             type: 'current',
           });
-        } else if (res.available) {
+        } else if (isAvailable) {
           setAvailabilityStatus({
             checking: false,
             available: true,
@@ -171,12 +181,31 @@ export const AccountPopover = ({
             checking: false,
             available: false,
             is_current: false,
-            message: res.detail || 'Already taken',
+            message: res?.detail || res?.message || 'Already taken',
             type: 'taken',
           });
         }
       } catch (err) {
         if (err.name === 'AbortError') return;
+
+        // Staleness guard
+        if (latestCleanRef.current.toLowerCase() !== clean.toLowerCase()) {
+          return;
+        }
+
+        // Handle structured error payload if returned by parseApiError
+        const errData = err.data;
+        if (errData && (errData.available === false || errData.is_available === false)) {
+          setAvailabilityStatus({
+            checking: false,
+            available: false,
+            is_current: false,
+            message: errData.detail || err.message || 'Already taken',
+            type: 'taken',
+          });
+          return;
+        }
+
         setAvailabilityStatus({
           checking: false,
           available: false,
@@ -236,7 +265,27 @@ export const AccountPopover = ({
       }
       setIsEditing(false);
     } catch (err) {
-      setSaveError(err.message || 'Failed to save profile changes.');
+      const errMsg = err.message || 'Failed to save profile changes.';
+      setSaveError(errMsg);
+
+      // If saving fails because username is already taken, update availability status
+      // to reflect unavailable/taken rather than leaving a conflicting "Available" badge on screen!
+      const isTaken =
+        err.status === 400 &&
+        (errMsg.toLowerCase().includes('taken') ||
+          err.data?.detail?.toLowerCase().includes('taken') ||
+          Boolean(err.fieldErrors?.username) ||
+          Boolean(err.data?.username));
+
+      if (isTaken) {
+        setAvailabilityStatus({
+          checking: false,
+          available: false,
+          is_current: false,
+          message: 'Already taken',
+          type: 'taken',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -303,7 +352,10 @@ export const AccountPopover = ({
                 className="account-popover__input"
                 placeholder="Display / Account name"
                 value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                onChange={(e) => {
+                  setEditName(e.target.value);
+                  if (saveError) setSaveError(null);
+                }}
                 maxLength={60}
                 disabled={isSaving}
               />
@@ -328,7 +380,12 @@ export const AccountPopover = ({
                   className="account-popover__input account-popover__input--with-prefix account-popover__input--mono"
                   placeholder="handle"
                   value={editUsername}
-                  onChange={(e) => setEditUsername(e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const cleaned = raw.replace(/^@+/, '');
+                    setEditUsername(cleaned);
+                    if (saveError) setSaveError(null);
+                  }}
                   maxLength={30}
                   disabled={isSaving}
                 />
